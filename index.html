@@ -1,0 +1,509 @@
+<!-- test ${x} `y` -->
+line2<!doctype html>
+<html lang="en">
+<title>Grammar Arena</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Figtree:wght@400;600;800&display=swap">
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+/* Layout: chalkboard app, one centered column; answers are Scrabble-style tiles */
+:root{--board:#10302b;--board2:#17433b;--line:#2c5f55;--chalk:#f2efe6;--dim:#a3beb6;--tile:#f1dfb4;--tile2:#e4cd96;--ink:#3a2a14;--coral:#ff7a59;--mint:#6fe0b0;--sky:#7cc4ff;--rose:#ff9ec0;--bad:#ff6b6b;--f1:'Fraunces',Georgia,serif;--f2:'Figtree',system-ui,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:auto}
+body{margin:0;background:var(--board);color:var(--chalk);font:16px/1.45 var(--f2);padding-block:12px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background-image:radial-gradient(circle at 20% 0,#1d5046 0,transparent 55%),radial-gradient(circle at 100% 100%,#0c2622 0,transparent 50%)}
+.wrap{max-width:760px;margin:0 auto}
+h1,h2,h3{font-family:var(--f1);margin:0;text-wrap:balance;line-height:1.1}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+.top{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:6px 0 14px;flex-wrap:wrap}
+.logo{display:flex;gap:4px;align-items:center;font-family:var(--f1);font-weight:900;font-size:22px;cursor:pointer}
+.logo i{font-style:normal;background:var(--tile);color:var(--ink);width:26px;height:26px;display:grid;place-items:center;border-radius:5px;font-size:16px;box-shadow:0 3px 0 var(--tile2)}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{background:var(--board2);border:1px solid var(--line);border-radius:99px;padding:4px 12px;font-weight:800;font-size:14px;font-variant-numeric:tabular-nums}
+.chip.snd{padding:4px 10px}
+.hero{padding:18px 0 8px}
+.hero h1{font-size:clamp(34px,8vw,56px);font-weight:900}
+.hero h1 em{font-style:normal;color:var(--coral)}
+.hero p{color:var(--dim);max-width:52ch;margin:10px 0 0}
+.namebox{display:flex;gap:8px;align-items:center;margin:14px 0;flex-wrap:wrap}
+.namebox label{color:var(--dim);font-weight:600}
+input[type=text]{background:var(--board2);border:2px solid var(--line);color:var(--chalk);border-radius:10px;padding:9px 12px;font:inherit;font-weight:800;width:170px;min-width:0}
+.modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:10px}
+.mode{text-align:left;background:var(--board2);border:2px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:6px;transition:transform .15s,border-color .15s;min-width:0}
+.mode:hover{transform:translateY(-3px);border-color:var(--mint)}
+.mode b{font-family:var(--f1);font-size:22px}
+.mode span{color:var(--dim);font-size:14px}
+.mode .tag{align-self:flex-start;background:var(--coral);color:#2a0d05;font-weight:800;font-size:11px;letter-spacing:.08em;text-transform:uppercase;border-radius:99px;padding:2px 9px}
+.mode.duel{border-color:var(--rose)}
+h2.sec{font-size:26px;margin:26px 0 10px}
+.zones{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.zone{position:relative;text-align:left;background:var(--board2);border:2px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.zone .ic{width:38px;height:38px;border-radius:8px;display:grid;place-items:center;font-family:var(--f1);font-weight:900;font-size:20px;color:#0d201c}
+.zone b{font-family:var(--f1);font-size:19px}
+.zone small{color:var(--dim)}
+.zone .st{letter-spacing:3px;color:var(--tile);font-size:15px}
+.zone.lock{opacity:.5;filter:grayscale(.6)}
+.zone .acts{display:flex;gap:8px;margin-top:4px}
+.btn{background:var(--tile);color:var(--ink);font-weight:800;border-radius:10px;padding:9px 16px;box-shadow:0 4px 0 var(--tile2);transition:transform .1s,box-shadow .1s}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--tile2)}
+.btn.alt{background:var(--board);color:var(--chalk);box-shadow:0 4px 0 var(--line);border:1px solid var(--line)}
+.btn.go{background:var(--mint);box-shadow:0 4px 0 #3da57c;color:#06271b}
+.btn.hot{background:var(--coral);box-shadow:0 4px 0 #c24b2e;color:#2a0d05}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.back{color:var(--dim);font-weight:800;padding:6px 0}
+/* play */
+.hud{display:flex;align-items:center;gap:12px;margin:6px 0 14px}
+.bar{flex:1;height:12px;background:var(--board2);border-radius:99px;overflow:hidden;border:1px solid var(--line)}
+.bar>div{height:100%;background:var(--mint);width:0;transition:width .3s}
+.hearts{letter-spacing:2px;color:var(--bad);font-size:20px;min-width:70px;text-align:right}
+.timer{height:6px;background:var(--board2);border-radius:99px;overflow:hidden;margin-bottom:12px}
+.timer>div{height:100%;background:var(--sky);width:100%}
+.card{background:var(--board2);border:2px solid var(--line);border-radius:18px;padding:20px}
+.qtype{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mint);font-weight:800}
+.q{font-family:var(--f1);font-size:clamp(21px,4.6vw,30px);font-weight:700;margin:8px 0 16px;line-height:1.25}
+.opts{display:grid;gap:10px}
+.opts.two{grid-template-columns:1fr 1fr}
+.tile{background:var(--tile);color:var(--ink);border-radius:10px;padding:12px 16px;text-align:left;font-weight:800;box-shadow:0 4px 0 var(--tile2),inset 0 0 0 2px #fff3;transition:transform .1s;display:flex;gap:10px;align-items:center;min-width:0;overflow-wrap:anywhere}
+.tile:hover{transform:translateY(-2px)}
+.tile .k{background:var(--ink);color:var(--tile);border-radius:5px;min-width:24px;height:24px;display:grid;place-items:center;font-size:12px;flex:none}
+.tile.ok{background:var(--mint);box-shadow:0 4px 0 #3da57c}
+.tile.no{background:var(--bad);box-shadow:0 4px 0 #b23a3a;color:#2b0808}
+.tile.picked{outline:3px solid var(--sky)}
+.tile[disabled]{pointer-events:none}
+.words{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px}
+.tray{min-height:58px;border:2px dashed var(--line);border-radius:12px;padding:8px;display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}
+.fb{margin-top:14px;border-radius:12px;padding:12px 14px;display:none}
+.fb.show{display:block}
+.fb.good{background:#123f31;border:1px solid var(--mint)}
+.fb.bad{background:#451f27;border:1px solid var(--bad)}
+.fb b{font-family:var(--f1);font-size:19px}
+.fb p{margin:4px 0 10px;color:var(--chalk)}
+.combo{color:var(--coral);font-weight:800}
+/* lesson */
+.lcard{background:var(--board2);border:2px solid var(--line);border-radius:18px;padding:20px;min-height:260px}
+.lcard h3{font-size:26px;margin-bottom:10px}
+.lcard .rule{background:var(--board);border-left:5px solid var(--mint);border-radius:8px;padding:10px 14px;margin:10px 0}
+.lcard .ex{color:var(--tile);font-style:italic}
+.lcard ul{margin:6px 0;padding-left:20px}
+.dots{display:flex;gap:6px;justify-content:center;margin:12px 0}
+.dots i{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.dots i.on{background:var(--tile)}
+.row{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+/* result */
+.big{font-family:var(--f1);font-size:clamp(40px,10vw,72px);font-weight:900}
+.stars{font-size:42px;letter-spacing:8px;color:var(--tile)}
+.center{text-align:center}
+.mist{text-align:left;margin-top:14px}
+.mist li{margin:6px 0;color:var(--dim)}
+/* duel */
+.vs{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:12px}
+.pl{background:var(--board2);border:2px solid var(--line);border-radius:14px;padding:10px 12px;min-width:0}
+.pl.me{border-color:var(--mint)}.pl.opp{border-color:var(--rose)}
+.pl b{display:block;font-family:var(--f1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl .sc{font-size:26px;font-weight:900;font-variant-numeric:tabular-nums}
+.pl small{color:var(--dim)}
+.vsx{font-family:var(--f1);font-weight:900;color:var(--coral)}
+.code{font-family:var(--f1);font-weight:900;font-size:54px;letter-spacing:10px;background:var(--tile);color:var(--ink);border-radius:12px;padding:6px 18px;display:inline-block;box-shadow:0 5px 0 var(--tile2)}
+.note{color:var(--dim);font-size:14px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--chalk);color:var(--board);font-weight:800;padding:10px 18px;border-radius:99px;z-index:20;box-shadow:0 8px 24px #0008}
+.pop{animation:pop .35s}
+@keyframes pop{0%{transform:scale(.9)}60%{transform:scale(1.04)}100%{transform:scale(1)}}
+.shake{animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:480px){.opts.two{grid-template-columns:1fr}.vs{grid-template-columns:1fr 1fr}.vsx{display:none}.code{font-size:40px;letter-spacing:6px}}
+</style>
+<div class="wrap" id="app"></div>
+<script>
+/* Standalone live room: two players connect directly (WebRTC via PeerJS, free public broker) */
+(function(){
+if(window.claude&&window.claude.use)return;
+const room={join:(code,host)=>new Promise((res,rej)=>{
+if(!window.Peer){rej(new Error('peerjs'));return}
+let conn=null,other=null,peer=null,done=false;const ls=new Set(),me={isMe:true,presence:{}};
+const emit=()=>ls.forEach(f=>{try{f()}catch(e){}});
+const fail=e=>{if(!done){done=true;try{peer&&peer.destroy()}catch(_){}rej(e)}};
+const api={peers:()=>other?[me,other]:[me],
+presence:async p=>{for(const k in p){if(p[k]===null)delete me.presence[k];else me.presence[k]=p[k]}if(conn&&conn.open)conn.send({p:Object.assign({},me.presence)});emit()},
+onPeers:f=>{ls.add(f);return()=>ls.delete(f)},
+leave:async()=>{try{peer.destroy()}catch(e){}}};
+const attach=c=>{conn=c;
+c.on('data',d=>{if(d&&d.p){other={isMe:false,presence:d.p};emit()}});
+c.on('close',()=>{other=null;emit()});c.on('error',()=>{});
+const hi=()=>c.send({p:Object.assign({},me.presence)});c.open?hi():c.on('open',hi)};
+const id='gaarena-'+String(code).replace(/^ga-/,'').toLowerCase();
+const ok=()=>{if(!done){done=true;res(api)}};
+if(host){peer=new Peer(id);peer.on('open',ok);peer.on('connection',c=>{if(conn&&conn.open){c.close();return}attach(c)});peer.on('error',fail)}
+else{peer=new Peer();peer.on('open',()=>{const c=peer.connect(id,{reliable:true});c.on('open',()=>{attach(c);ok()});c.on('error',fail)});peer.on('error',fail);setTimeout(()=>fail(new Error('timeout')),12000)}
+})};
+window.claude={use:async n=>n==='room'?room:null};
+})();
+const Z=[];
+Z.push({id:'sen',n:'Sentence Sprint',ic:'S',c:'#6fe0b0',d:'Kinds of sentences, subject, predicate, phrase, clause',
+L:[['What is a sentence?','<p>A sentence is a group of words that makes <b>complete sense</b>.</p><div class="rule"><b>Four kinds</b><ul><li>Declarative: a statement</li><li>Interrogative: a question</li><li>Imperative: command, request</li><li>Exclamatory: strong feeling</li></ul></div><p class="ex">How cold the night is!</p>'],
+['Subject and predicate','<p>Every sentence has two parts. The <b>subject</b> names who or what we talk about. The <b>predicate</b> says something about the subject.</p><div class="rule">In an order like <i>Here comes the bus</i>, the subject can come after the verb.</div><p class="ex">Sit down. (the subject <b>you</b> is understood)</p>'],
+['Phrase or clause?','<div class="rule"><b>Phrase</b>: makes sense but not complete sense. No subject + predicate of its own.</div><div class="rule"><b>Clause</b>: has its own subject and predicate.</div><p class="ex">of great beauty (phrase) / which is made of gold (clause)</p>'],
+['Use decides the part of speech','<p>Eight parts of speech: noun, adjective, pronoun, verb, adverb, preposition, conjunction, interjection.</p><div class="rule">The same word can change class by its job. <b>after</b> is an adverb in <i>soon after</i>, a preposition in <i>after us</i>, a conjunction in <i>after we left</i>.</div>']],
+Q:[
+['m','Which is an INTERROGATIVE sentence?',['Where do you live?','Be quiet.','What a lovely day!','The sun rises in the east.'],0,'An interrogative sentence asks a question.'],
+['m','"How cold the night is!" is a(n) ___ sentence.',['exclamatory','declarative','imperative','interrogative'],0,'It expresses strong feeling, so it is exclamatory.'],
+['m','"Shut the door." is a(n) ___ sentence.',['imperative','declarative','exclamatory','interrogative'],0,'A command is imperative. The subject "you" is understood.'],
+['m','In "Here comes the bus", the subject is:',['the bus','Here','comes','Here comes'],0,'The subject can follow the verb. Who or what comes? The bus.'],
+['m','Which group of words is a CLAUSE?',['which is made of gold','of great beauty','in the east','under the bridge'],0,'A clause has its own subject (which) and predicate (is made of gold).'],
+['m','Which is a PHRASE?',['in a corner','he sat down','when it rained','the boy laughed'],0,'"in a corner" makes sense but has no subject and predicate of its own.'],
+['m','In "Sit down", the understood subject is:',['you','I','we','it'],0,'Imperative sentences address the listener: you.'],
+['t','Tap the word that is the VERB.','The boy kicked the ball',2,'"kicked" shows the action.'],
+['m','In "They arrived soon after", the word "after" is a(n):',['adverb','preposition','conjunction','adjective'],0,'It has no object and modifies the verb arrived, so it is an adverb.'],
+['m','In "after us", the word "after" is a(n):',['preposition','adverb','conjunction','noun'],0,'It has an object (us), so it is a preposition.'],
+['o','Arrange the words into a sentence.','Humpty Dumpty sat on a wall.','A declarative sentence: subject first, then predicate.'],
+['m','Which sentence has a subject AFTER the verb?',['Sweet are the uses of adversity.','The boy stood on the burning deck.','Birds fly.','I like tea.'],0,'The subject "the uses of adversity" follows the verb "are".']]});
+Z.push({id:'nou',n:'Noun Nation',ic:'N',c:'#ff9ec0',d:'Kinds, gender, number, case',
+L:[['Kinds of noun','<div class="rule"><b>Proper</b>: particular name (Asoka, India)<br><b>Common</b>: class name (king, city)<br><b>Collective</b>: group as one (crowd, jury, fleet)<br><b>Abstract</b>: quality, action, state (kindness, theft, childhood)</div><p>Abstract nouns come from adjectives (kind > kindness), verbs (obey > obedience) and common nouns (child > childhood).</p>'],
+['Gender','<div class="rule">Masculine, Feminine, <b>Common</b> (parent, child, pupil) and <b>Neuter</b> (book, pen, room).</div><p>Personification: <b>masculine</b> for strength (Sun, Death), <b>feminine</b> for beauty and gentleness (Moon, Spring, Mercy). A ship is <i>she</i>.</p><p class="ex">actor > actress, hero > heroine, peacock > peahen</p>'],
+['Number: making plurals','<ul><li>Add <b>-s</b> (boy, boys)</li><li>-s, -sh, -ch, -x, most -o: add <b>-es</b> (class, box, hero)</li><li>consonant + y: <b>-ies</b> (baby, babies)</li><li>-f, -fe: <b>-ves</b> (thief, wife, leaf)</li><li>Irregular: man/men, ox/oxen, sheep/sheep</li></ul><p>Only -s for piano, photo, dynamo, solo. Mathematics, news, measles are singular.</p>'],
+['Case','<div class="rule"><b>Nominative</b>: subject. <b>Objective</b>: object of verb or after a preposition. <b>Possessive</b>: ownership.</div><ul><li>Singular: <b>boy\'s</b> book</li><li>Plural in -s: <b>boys\'</b> school</li><li>Plural not in -s: <b>men\'s</b> club</li></ul><p>Apposition: same case as the noun it explains.</p>']],
+Q:[
+['m','"Kindness" is a(n) ___ noun.',['abstract','common','collective','proper'],0,'Kindness is a quality, so it is abstract.'],
+['m','Which is a COLLECTIVE noun?',['fleet','Delhi','honesty','sugar'],0,'A fleet is a group of ships taken as one whole.'],
+['m','The feminine of "peacock" is:',['peahen','peaness','peacockess','peawoman'],0,'Feminine is formed by changing a word: peacock > peahen.'],
+['m','The feminine of "actor" is:',['actress','actoress','actrix','actorine'],0,'Drop the vowel before -ess: actor > actress.'],
+['m','"Moon" is personified as:',['feminine','masculine','neuter','common'],0,'Beauty and gentleness are personified as feminine.'],
+['m','Plural of "baby":',['babies','babys','babyes','babis'],0,'Consonant + y changes to -ies.'],
+['m','Plural of "thief":',['thieves','thiefs','thiefes','thievs'],0,'Words in -f/-fe usually change to -ves.'],
+['m','Which noun takes only -s in the plural?',['piano','hero','potato','mango'],0,'piano, photo, dynamo take -s. hero, potato, mango take -es.'],
+['m','Choose the correct sentence.',['Mathematics is a difficult subject.','Mathematics are a difficult subject.','Mathematic is a difficult subject.','Mathematics were difficult.'],0,'Mathematics looks plural but is singular.'],
+['m','Possessive plural of "children":',["children's","childrens'","childrens","children'"],0,"Plural not ending in -s takes 's: children's."],
+['t','Tap the word in the OBJECTIVE case.','Rama gave Hari a ball',2,'"Hari" is the indirect object. Rama is the subject.'],
+['m','Choose the correct form.',["the boys' school","the boy's' school","the boys's school","the boys school's"],0,"Plural ending in -s: add an apostrophe only."]]});
+Z.push({id:'adj',n:'Adjective Alley',ic:'A',c:'#7cc4ff',d:'Kinds, comparison, a / an / the',
+L:[['Kinds of adjective','<ul><li><b>Quality</b>: clever, honest, Indian</li><li><b>Quantity</b>: some, much, little, enough</li><li><b>Number</b>: one (cardinal), first (ordinal), many, each, every</li><li><b>Demonstrative</b>: this, that</li><li><b>Interrogative</b>: what, which, whose</li></ul><p><b>Attributive</b> use is before the noun; <b>predicative</b> use is after the verb.</p>'],
+['Degrees of comparison','<p>Positive: sweet. Comparative: sweeter (two). Superlative: sweetest (more than two).</p><div class="rule">One syllable: -er, -est. Long words: more, most. e: just -r, -st. consonant + y: y becomes i (happy, happier). Short vowel + consonant: double it (big, bigger).</div><p>Irregular: good, better, best. bad, worse, worst. Some words take <b>to</b>, not than: senior, junior, superior.</p>'],
+['little, few, some, any','<div class="rule"><b>a little / a few</b>: some, positive.<br><b>little / few</b>: hardly any, negative.<br><b>the little / the few</b>: all there is or are.</div><p><b>Some</b> in affirmative and offers; <b>any</b> in negative and questions. <b>Each</b> for two or more; <b>every</b> for more than two.</p>'],
+['Articles','<div class="rule"><b>a</b> before a consonant SOUND (a university). <b>an</b> before a vowel sound (an hour).</div><p>Use <b>the</b> for particular things, rivers, oceans, unique things (the sun), superlatives. Omit articles for general plurals, substances, abstract nouns, meals, languages.</p><p class="ex">a black and white dog (one) / a black and a white dog (two)</p>']],
+Q:[
+['m','Choose the correct article: ___ university',['a','an','the','no article'],0,'University begins with a consonant sound /ju/.'],
+['m','Choose the correct article: ___ hour',['an','a','the','no article'],0,'Hour begins with a vowel sound because h is silent.'],
+['m','Comparative of "happy":',['happier','more happy','happyer','happiest'],0,'Consonant + y: y becomes i, add -er.'],
+['m','Comparative of "big":',['bigger','biger','more big','bigest'],0,'Short vowel + consonant: double the consonant.'],
+['m','Choose the correct sentence.',['He is senior to me.','He is senior than me.','He is more senior than me.','He is senior from me.'],0,'senior, junior, superior, inferior take "to".'],
+['m','She has ___ friends, so she feels lonely.',['few','a few','the few','little'],0,'"few" means hardly any: negative.'],
+['m','I have ___ money, enough to buy a book.',['a little','little','few','a few'],0,'"a little" means some: positive. Money is uncountable.'],
+['m','"Which book do you want?" The word "which" is an adjective of:',['interrogative kind','quality','quantity','number'],0,'Which asks a question about the noun.'],
+['m','Choose the correct sentence.',['Each of the two boys got a prize.','Every of the two boys got a prize.','Every two boys got each.','Each two boy got a prize.'],0,'"Each" is used for two or more taken singly.'],
+['m','"The Ganga" has "the" because:',['it is the name of a river','it is a person','it is abstract','it is a meal'],0,'Names of rivers take the definite article.'],
+['t','Tap the adjective of quantity.','He drank much water yesterday',2,'"much" tells how much water.'],
+['m','Which is correct?',['He plays the violin.','He plays violin.','He plays a violin well the.','He plays an violin.'],0,'Musical instruments take "the".'],
+['m','"Gold is a precious metal." Why no article before Gold?',['It is a substance used in general sense','It is plural','It is a person','It is unique'],0,'Substance nouns in a general sense have no article.']]});
+Z.push({id:'pro',n:'Pronoun Plaza',ic:'P',c:'#ffb36b',d:'Personal, reflexive, relative, interrogative',
+L:[['Personal pronouns','<div class="rule">Nominative: I, we, you, he, she, it, they. Accusative: me, us, you, him, her, it, them.</div><p>After a preposition use the accusative: <i>between you and me</i>. Here <b>but</b> means except: <i>All but him</i>.</p><p>Order of persons: <b>You, he and I</b> (2nd, 3rd, 1st) when a fault is admitted: <i>I, you and he</i>.</p>'],
+['Reflexive and emphatic','<p>Forms in -self / -selves: myself, himself, themselves.</p><div class="rule"><b>Reflexive</b>: action returns to the subject. <i>I hurt myself.</i><br><b>Emphatic</b>: adds force. <i>I myself saw it.</i></div>'],
+['Relative pronouns','<div class="rule"><b>who</b> persons. <b>which</b> things and animals. <b>that</b> persons and things, restrictive. <b>what</b> = that which.</div><p><b>That</b> is preferred after superlatives, all, same, any, none, nothing, only, and after who / what.</p><p><b>Defining</b> clause: no commas. <b>Non-defining</b>: extra information in commas.</p>'],
+['Interrogative and others','<p><b>who</b> persons. <b>which</b> selection from a few. <b>what</b> things, or occupation (<i>What is he?</i>).</p><p>Distributive: each, either, neither (singular). Reciprocal: each other, one another. Demonstrative: this, that, these, those, such.</p>']],
+Q:[
+['m','Choose the correct sentence.',['Between you and me, it is a secret.','Between you and I, it is a secret.','Between I and you, it is a secret.','Between me and you I it is.'],0,'After a preposition use the accusative: me.'],
+['m','"I myself saw the accident." Here "myself" is:',['emphatic','reflexive','relative','reciprocal'],0,'It adds emphasis; the sentence is complete without it.'],
+['m','"He hurt himself." Here "himself" is:',['reflexive','emphatic','demonstrative','indefinite'],0,'The action turns back on the subject.'],
+['m','Fill in: This is the best book ___ I have read.',['that','which','who','what'],0,'"That" is preferred after a superlative.'],
+['m','Fill in: He is the man ___ helped me.',['who','which','whose','what'],0,'"who" refers to a person.'],
+['m','Fill in: The horse ___ won the race is mine.',['which','who','whom','what'],0,'"which" for animals.'],
+['m','"What is he?" asks about his:',['occupation','name','place','age'],0,'"What" asks about profession; "Who" asks about identity.'],
+['m','Fill in: ___ do you prefer, tea or coffee?',['Which','Who','Whose','Whom'],0,'"which" is selective, from a limited number.'],
+['m','"Each" and "either" are ___ pronouns.',['distributive','reciprocal','relative','reflexive'],0,'They refer to persons or things one at a time.'],
+['m','Choose the correct sentence.',['The two girls love one another.','The two girls love themselves each other.','The two girls loves each other.','The two girls love each others.'],0,'A reciprocal pronoun shows mutual action.'],
+['t','Tap the relative pronoun.','The man who called you is here',2,'"who" joins the clause and refers back to man.'],
+['m','Which clause is NON-DEFINING?',['My brother, who lives in Pune, is a doctor.','The man who called is a doctor.','Anyone who works hard succeeds.','The book that I bought is old.'],0,'It adds extra information and is set off by commas.']]});
+Z.push({id:'vb1',n:'Verb Valley',ic:'V',c:'#c4a3ff',d:'Transitive, intransitive, voice, mood',
+L:[['Transitive and intransitive','<div class="rule"><b>Transitive</b>: action passes to an object. <i>The boy kicks the ball.</i><br><b>Intransitive</b>: stops with the doer. <i>The boy laughs.</i></div><p>Spelling pairs: <b>lie/lay</b>, <b>rise/raise</b>, <b>sit/set</b>, <b>fall/fell</b>. The first is intransitive, the second transitive.</p><p>Cognate object: <i>fight a good fight</i>.</p>'],
+['Voice','<div class="rule"><b>Active</b>: subject does. <i>Rama helps Hari.</i><br><b>Passive</b>: subject receives. <i>Hari is helped by Rama.</i></div><p>Passive = <b>be + past participle</b>. Only transitive verbs have a passive. Use <b>with</b> for an instrument: <i>pierced with an arrow</i>.</p>'],
+['Mood','<div class="rule"><b>Indicative</b>: fact, question. <b>Imperative</b>: command, request, entreaty. <b>Subjunctive</b>: wish, unreal, improbable.</div><p class="ex">I wish I were rich. If I were you... He talks as if he knew everything. It is time we left.</p>'],
+['Incomplete predication','<p>Verbs like <b>be, become, seem, appear</b> need a <b>subject complement</b>: <i>The sky grew dark.</i> Some transitive verbs need an <b>objective complement</b>: <i>They made him captain.</i></p>']],
+Q:[
+['m','"The boy laughs." The verb "laughs" is:',['intransitive','transitive','auxiliary','passive'],0,'No object receives the action.'],
+['m','Choose the correct form: The hen has ___ an egg.',['laid','lain','lied','lay'],0,'Lay (put) is transitive: lay, laid, laid.'],
+['m','Choose the correct form: The sun ___ in the east.',['rises','raises','rised','arouses'],0,'Rise is intransitive. No object follows.'],
+['m','Passive of "Rama helps Hari":',['Hari is helped by Rama.','Hari was helped by Rama.','Hari helps Rama.','Hari is helping by Rama.'],0,'Simple present passive: is + past participle.'],
+['m','Passive of "All laughed at him":',['He was laughed at by all.','He is laughed at by all.','He laughed at all.','All were laughed at him.'],0,'Past tense: was + past participle.'],
+['m','The passive is formed with:',['be + past participle','have + infinitive','do + base verb','will + gerund'],0,'The auxiliary be plus the past participle.'],
+['m','"I wish I ___ rich." Choose the correct form.',['were','was','am','be'],0,'Past subjunctive after wish.'],
+['m','"If I ___ you, I would apologise."',['were','am','was being','be'],0,'Unreal condition uses the subjunctive: were.'],
+['m','"Wait there." The mood is:',['imperative','indicative','subjunctive','conditional'],0,'It is a command.'],
+['m','"He is the ringleader." The mood is:',['indicative','imperative','subjunctive','potential'],0,'It states a fact.'],
+['t','Tap the SUBJECT complement.','The sky grew dark',3,'"dark" completes the meaning of grew.'],
+['m','Choose the correct sentence.',['The bridge was pierced with an arrow.','The bridge was pierced by an arrow tool.','The arrow pierced by the bridge.','Pierced the bridge with an arrow was.'],0,'Use "with" for an instrument.']]});
+Z.push({id:'ten',n:'Tense Tower',ic:'T',c:'#ff7a59',d:'Present, past, future and their forms',
+L:[['Twelve forms','<p>Three tenses, four forms each: <b>Simple, Continuous, Perfect, Perfect Continuous</b>.</p><div class="rule">Present: loves / is loving / has loved / has been loving<br>Past: loved / was loving / had loved / had been loving<br>Future: will love / will be loving / will have loved / will have been loving</div>'],
+['Present tenses','<ul><li><b>Simple</b>: habit and general truth. <i>The sun rises in the east.</i></li><li><b>Continuous</b>: now, or an arranged future. <i>I am leaving tomorrow.</i></li><li><b>Perfect</b>: past linked with now. <i>I have lived here since 2010.</i></li><li><b>Perfect continuous</b>: began earlier, continues. <i>I have been waiting for an hour.</i></li></ul><div class="rule">Never use the present perfect with a past-time word: not <i>He has come yesterday</i>.</div>'],
+['Past tenses','<ul><li><b>Simple</b>: completed action, often with yesterday, last week, ago.</li><li><b>Continuous</b>: in progress at a past time. <i>It was raining when I left.</i></li><li><b>Past perfect</b>: the earlier of two past actions. <i>The train had left when I reached.</i></li></ul>'],
+['Talking about the future','<ul><li><b>will</b>: facts, beliefs, instant decisions</li><li><b>going to</b>: plans and evidence now</li><li><b>be about to</b>: very soon</li><li><b>Simple present</b>: timetables; after if, when, unless</li><li><b>be to</b>: official plans</li></ul><p>Verbs of perception, emotion, thinking and possession (see, love, know, have) usually avoid the continuous.</p>']],
+Q:[
+['m','Choose the correct sentence.',['He came yesterday.','He has come yesterday.','He is coming yesterday.','He has been come yesterday.'],0,'Past-time words need the simple past.'],
+['m','The sun ___ in the east.',['rises','is rising','has risen','rose'],0,'General truth: simple present.'],
+['m','I ___ here since 2010.',['have lived','lived','live','am living'],0,'Since + point of time: present perfect.'],
+['m','She ___ for an hour when I arrived.',['had been waiting','was wait','has been waiting','waits'],0,'Continuing up to a past moment: past perfect continuous.'],
+['m','When I reached the station, the train ___.',['had left','has left','leaves','is leaving'],0,'Earlier past action: past perfect.'],
+['m','If it ___ tomorrow, we will stay home.',['rains','will rain','is going to rain','rained'],0,'After if, use the simple present for future time.'],
+['m','"The train leaves at 6 a.m." The simple present is used for:',['a timetable','a past habit','a wish','a polite request'],0,'Fixed programmes use the simple present.'],
+['m','Which verb is NOT normally used in the continuous?',['know','run','write','play'],0,'Verbs of thinking and knowing are stative.'],
+['m','"Look at those clouds! It ___ rain." (evidence now)',['is going to','will','shall','would'],0,'"going to" shows a prediction based on present evidence.'],
+['m','I ___ my work by 5 p.m. tomorrow.',['will have finished','will finish','am finishing','have finished'],0,'Completed by a future time: future perfect.'],
+['m','Choose the correct sentence.',['He does not know the answer.','He is not knowing the answer.','He not knows the answer.','He does not knows the answer.'],0,'Know is stative; and does takes the base verb.'],
+['t','Tap the AUXILIARY verb.','She has finished her homework',1,'has finished = has is the auxiliary; finished is the past participle.'],
+['m','Third person singular, simple present: He ___ to school.',['goes','go','going','gone'],0,'Add -es to go in the third person singular.']]});
+Z.push({id:'vb2',n:'Verb Forge',ic:'F',c:'#e6a8ff',d:'Infinitive, participle, gerund, modals',
+L:[['Infinitive','<p>The verb acting like a noun: <i>To err is human.</i> The bare infinitive (no <b>to</b>) follows will, would, shall, should, may, might, can, could, must.</p><p class="ex">He works to win. (purpose) / good to eat</p>'],
+['Participle vs gerund','<div class="rule"><b>Participle</b> = verb + adjective. <i>a running stream</i><br><b>Gerund</b> = verb + noun (-ing). <i>Seeing is believing.</i></div><p>Use the possessive before a gerund: <i>I dislike <b>his</b> coming late.</i></p><p>Dangling participle: it must attach to the right noun. Wrong: <i>Walking down the road, a dog bit him.</i></p>'],
+['Auxiliaries and modals','<ul><li><b>can</b> ability, <b>could</b> past ability</li><li><b>may</b> permission, possibility</li><li><b>shall / will</b> future; <b>should</b> duty; <b>would</b> habit, polite request</li><li><b>must</b> necessity; <b>ought to</b> moral duty</li><li><b>used to</b> discontinued habit</li><li><b>need, dare</b>: no -s in negatives</li></ul>'],
+['Irregular verbs','<div class="rule">Three types: cut-cut-cut, sit-sat-sat, ring-rang-rung.</div><p>Do: does, did, with a base verb: <i>Did he go?</i> Do for emphasis: <i>I do love you.</i></p>']],
+Q:[
+['m','"Seeing is believing." "Seeing" is a:',['gerund','participle','infinitive','noun clause'],0,'It is used as a noun, the subject.'],
+['m','"A running stream." "running" is a:',['participle','gerund','infinitive','modal'],0,'It qualifies the noun stream.'],
+['m','Choose the correct sentence.',['I dislike his coming late.','I dislike him coming late.','I dislike he coming late.','I dislike coming his late.'],0,'Use the possessive before a gerund.'],
+['m','Which uses a bare infinitive?',['He can swim.','He wants to swim.','He is able to swim.','He hopes to swim.'],0,'Modals like can are followed by the bare infinitive.'],
+['m','Choose the correct sentence.',['He need not come.','He needs not to come.','He not need come.','He need not to come.'],0,'The modal need takes the bare infinitive, with no -s.'],
+['m','Past of "ring":',['rang','rung','ringed','rong'],0,'ring, rang, rung.'],
+['m','Past participle of "cut":',['cut','cutted','cuted','cutten'],0,'cut, cut, cut: all three forms same.'],
+['m','"You ___ respect your elders." (moral duty)',['ought to','used to','dare','need'],0,'"ought to" expresses moral obligation.'],
+['m','"I ___ play cricket every evening." (a past habit that has stopped)',['used to','am used','use','was use'],0,'"used to" shows a discontinued habit.'],
+['m','"___ I open the window?" asks for the listener\'s wish. Choose:',['Shall','Will','Would','Do'],0,'"Shall I...?" asks the will of the person addressed.'],
+['m','Which sentence has a dangling participle?',['Walking down the road, a dog bit him.','Walking down the road, he was bitten by a dog.','Having finished, we left.','Seeing me, he waved.'],0,'The participle should attach to a person walking, not to the dog.'],
+['t','Tap the GERUND.','Swimming is good exercise',0,'"Swimming" is a verb used as a noun (subject).'],
+['m','"Did he go?" Here "did" is a(n):',['auxiliary','main verb','participle','gerund'],0,'Did helps to form the question; go is the main verb.']]});
+Z.push({id:'adv',n:'Adverb Arcade',ic:'D',c:'#6fe0d0',d:'Kinds, comparison, formation, position',
+L:[['What adverbs do','<p>An adverb modifies a verb, adjective, another adverb, a phrase or a whole sentence.</p><div class="rule">By meaning: Time (soon), Frequency (often), Place (here), Manner (slowly), Degree (very), Affirmation/Negation (surely, not), Reason (therefore).</div><p>By use: Simple, Interrogative (when, why), Relative (the house <b>where</b> I was born).</p>'],
+['Comparison','<p>One syllable: <b>-er, -est</b> (soon, sooner). Adverbs in -ly: <b>more, most</b>. Irregular: well, better, best; badly, worse, worst.</p><p>Same form as the adjective: fast, hard, early, long. Two forms: hard / hardly, late / lately, near / nearly (different meanings).</p>'],
+['Position','<ul><li>Frequency adverbs go before the main verb, after am/is/are/was.</li><li><b>enough</b> comes AFTER the word it modifies.</li><li><b>only</b> sits just before the word it modifies.</li><li>Order: manner, place, time.</li></ul><p class="ex">She is tall enough. He always arrives late.</p>']],
+Q:[
+['m','"She sings beautifully." "beautifully" is an adverb of:',['manner','time','place','degree'],0,'It tells how she sings.'],
+['m','"He rarely visits us." The adverb of:',['frequency','place','manner','reason'],0,'It tells how often.'],
+['m','Choose the correct sentence.',['He is tall enough to touch the roof.','He is enough tall to touch the roof.','He is tall enough touch the roof.','Enough he is tall.'],0,'"enough" follows the adjective it modifies.'],
+['m','"He ___ comes late." Where does "always" go?',['He always comes late.','He comes always late.','Always he comes late.','He comes late always.'],0,'Frequency adverbs go before the main verb.'],
+['m','Comparative of "well" (adverb):',['better','weller','more well','gooder'],0,'well, better, best.'],
+['m','"hardly" means:',['scarcely','with effort','strongly','quickly'],0,'hard = with effort; hardly = scarcely. The meanings differ.'],
+['m','Which word is an adverb in "He runs fast"?',['fast','He','runs','none'],0,'"fast" modifies the verb runs, and has the same form as the adjective.'],
+['m','"When did you arrive?" "When" is a(n):',['interrogative adverb','relative adverb','simple adverb','conjunction'],0,'It modifies the verb and asks a question.'],
+['m','"This is the house where I was born." "where" is a:',['relative adverb','interrogative adverb','preposition','pronoun'],0,'It modifies was born and refers back to house.'],
+['t','Tap the adverb of degree.','The soup is very hot',3,'"very" tells to what degree.'],
+['m','Which adverbs can be compared?',['manner, degree, time','place only','affirmation','reason'],0,'Only adverbs of manner, degree and time admit comparison.']]});
+Z.push({id:'lnk',n:'Link Lounge',ic:'L',c:'#f2efe6',d:'Preposition, conjunction, interjection, same word',
+L:[['Prepositions','<div class="rule"><b>since</b> a point of time, <b>for</b> a period. <b>till</b> time, <b>to</b> place. <b>with</b> instrument, <b>by</b> agent. <b>in</b> cities, <b>at</b> small places. <b>beside</b> at the side of, <b>besides</b> in addition to. <b>between</b> two, <b>among</b> more.</div><p>Kinds: Simple, Compound, Phrase (in spite of), Participial (during, regarding).</p>'],
+['Conjunctions','<div class="rule"><b>Co-ordinating</b>: Cumulative (and), Adversative (but, yet), Disjunctive (or, nor), Illative (for).<br><b>Subordinating</b>: Time, Cause, Purpose (lest, so that), Result, Condition (if, unless), Concession (though), Comparison (than).</div><p>Correlatives: either...or, neither...nor, both...and, not only...but also, whether...or.</p><p><b>Lest</b> is followed by <b>should</b>.</p>'],
+['Interjections','<p>Sudden feeling: joy (Hurrah!), grief (Alas!), surprise (Ha! What!), approval (Bravo!). Phrases too: <i>Good gracious! Well done!</i></p>'],
+['Same word, many jobs','<div class="rule">Function decides the part of speech.</div><ul><li><b>but</b>: conjunction, preposition (all but him), adverb</li><li><b>for</b>: preposition, conjunction</li><li><b>enough</b>: adjective, adverb, noun</li><li><b>as, after, before, either...</b></li></ul>']],
+Q:[
+['m','I have lived here ___ 2015.',['since','for','from','by'],0,'Since goes with a point of time.'],
+['m','I have lived here ___ ten years.',['for','since','from','at'],0,'For goes with a period.'],
+['m','He was killed ___ a sword.',['with','by','from','in'],0,'Use "with" for the instrument.'],
+['m','Work hard ___ you should fail.',['lest','so','unless','though'],0,'Lest = so that not. It takes should.'],
+['m','Neither he ___ his brother came.',['nor','or','and','but'],0,'Neither pairs with nor.'],
+['m','Choose the correct sentence.',['He sat beside me.','He sat besides me.','He sat beside of me.','He sat besides of me.'],0,'beside = at the side of. besides = in addition to.'],
+['m','She divided the sweets ___ her two sons.',['between','among','amongst of','in between'],0,'Between is for two; among for more than two.'],
+['m','"Hurrah! We won!" "Hurrah" is an interjection of:',['joy','grief','surprise','approval'],0,'It expresses joy.'],
+['m','"Alas!" expresses:',['grief','joy','approval','anger'],0,'Alas is an interjection of sorrow.'],
+['m','"Everyone came but him." "but" is a:',['preposition','conjunction','adverb','verb'],0,'"but" = except, with the object "him".'],
+['m','"I will wait for you." The part of speech of "for" is:',['preposition','conjunction','adverb','pronoun'],0,'It has an object: you.'],
+['t','Tap the conjunction.','I stayed home because it rained',3,'"because" joins the clauses and shows cause.'],
+['m','"Though he is poor, he is honest." This conjunction shows:',['concession','cause','purpose','time'],0,'Though introduces a clause of concession.']]});
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function hash(s){let h=1779033703^s.length;for(let i=0;i<s.length;i++){h=Math.imul(h^s.charCodeAt(i),3432918353);h=h<<13|h>>>19}return h>>>0}
+function rngOf(seed){let a=hash(String(seed));return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function shuf(arr,r){const a=arr.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+const ALL=Z.flatMap(z=>z.Q.map((q,i)=>({k:z.id+'#'+i,z:z.id,q})));
+const BYK=Object.fromEntries(ALL.map(x=>[x.k,x]));
+const ZB=Object.fromEntries(Z.map(z=>[z.id,z]));
+/* ---------- saved progress (this browser only) ---------- */
+let S={name:'',xp:0,streak:0,last:'',zones:{},wrong:[],snd:true,played:0};
+try{const j=localStorage.getItem('ga1');if(j)S=Object.assign(S,JSON.parse(j))}catch(e){}
+function save(){try{localStorage.setItem('ga1',JSON.stringify(S))}catch(e){}}
+const lvl=()=>Math.floor(Math.sqrt(S.xp/60))+1;
+const today=()=>new Date().toISOString().slice(0,10);
+function bumpStreak(){const t=today();if(S.last===t)return;const y=new Date(Date.now()-864e5).toISOString().slice(0,10);S.streak=S.last===y?S.streak+1:1;S.last=t}
+/* ---------- sound ---------- */
+let AC=null;
+function tone(f,d,t='sine',v=.12,at=0){if(!S.snd)return;try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();o.type=t;o.frequency.value=f;g.gain.value=v;g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+at+d);o.connect(g);g.connect(AC.destination);o.start(AC.currentTime+at);o.stop(AC.currentTime+at+d)}catch(e){}}
+const sfx={ok(){tone(660,.12,'triangle');tone(880,.18,'triangle',.12,.1)},no(){tone(180,.25,'sawtooth',.08)},win(){[523,659,784,1046].forEach((f,i)=>tone(f,.22,'triangle',.12,i*.12))},tick(){tone(420,.05,'square',.04)}};
+let toastT;function toast(m){let t=$('.toast');if(!t){t=document.createElement('div');t.className='toast';document.body.appendChild(t)}t.textContent=m;clearTimeout(toastT);toastT=setTimeout(()=>t.remove(),2200)}
+/* ---------- shell ---------- */
+let view='home',timers=[];
+function clearTimers(){timers.forEach(clearInterval);timers.forEach(clearTimeout);timers=[]}
+function topbar(){return `<div class="top"><div class="logo" data-act="home"><i>G</i><i>A</i><span style="margin-left:6px">Grammar Arena</span></div><div class="chips"><span class="chip">Lv ${lvl()}</span><span class="chip">${S.xp} XP</span><span class="chip">🔥 ${S.streak}</span><button class="chip snd" data-act="snd" aria-label="Toggle sound">${S.snd?'Sound on':'Sound off'}</button></div></div>`}
+function mount(html){clearTimers();$('#app').innerHTML=topbar()+html;window.scrollTo(0,0)}
+function stars(n){return '★'.repeat(n)+'☆'.repeat(3-n)}
+function unlocked(i){return i===0||((S.zones[Z[i-1].id]||{}).stars||0)>=1}
+function home(){
+view='home';
+const zs=Z.map((z,i)=>{const st=(S.zones[z.id]||{}).stars||0,u=unlocked(i);
+return `<div class="zone ${u?'':'lock'}"><div class="ic" style="background:${z.c}">${z.ic}</div><b>${esc(z.n)}</b><small>${esc(z.d)}</small><span class="st">${stars(st)}</span><div class="acts"><button class="btn alt" data-act="lesson" data-z="${z.id}">Lesson</button><button class="btn go" data-act="quest" data-z="${z.id}" ${u?'':'disabled'}>${u?'Play':'Locked'}</button></div></div>`}).join('');
+const nw=S.wrong.length;
+mount(`<div class="hero"><h1>Learn grammar by <em>playing</em>.</h1><p>Nine zones from Wren &amp; Martin Book I. Read a quick lesson, win the round, unlock the next zone. Then challenge your wife live.</p></div>
+<div class="namebox"><label for="nm">Your name</label><input type="text" id="nm" maxlength="14" placeholder="Player" value="${esc(S.name)}"></div>
+<div class="modes">
+<button class="mode duel" data-act="duel"><span class="tag">Live, 2 players</span><b>Duel with partner</b><span>Same questions, same time, two screens. Share a room code.</span></button>
+<button class="mode" data-act="daily"><b>Daily Challenge</b><span>10 mixed questions, new set every day.</span></button>
+<button class="mode" data-act="boss"><b>Boss Battle</b><span>12 mixed questions from every zone. 3 lives.</span></button>
+<button class="mode" data-act="review"><b>Review Mistakes</b><span>${nw?nw+' question'+(nw>1?'s':'')+' to fix. Clear them all.':'Nothing yet. Missed questions land here.'}</span></button>
+</div>
+<h2 class="sec">Quest Map</h2><div class="zones">${zs}</div>
+<p class="note" style="margin-top:22px">Progress is saved in this browser. Each round gives XP, and a streak counts days played in a row.</p>`);
+}
+function lesson(zid,idx=0){
+const z=ZB[zid],L=z.L[idx];view='lesson';
+mount(`<button class="back" data-act="home">‹ Back to map</button><div class="qtype" style="margin-top:6px">${esc(z.n)} · Lesson ${idx+1} of ${z.L.length}</div><div class="lcard pop"><h3>${esc(L[0])}</h3>${L[1]}</div><div class="dots">${z.L.map((_,i)=>`<i class="${i===idx?'on':''}"></i>`).join('')}</div><div class="row"><button class="btn alt" data-act="lnav" data-z="${zid}" data-i="${idx-1}" ${idx?'':'disabled'}>‹ Previous</button>${idx<z.L.length-1?`<button class="btn" data-act="lnav" data-z="${zid}" data-i="${idx+1}">Next ›</button>`:`<button class="btn go" data-act="quest" data-z="${zid}">Play this zone</button>`}</div>`);
+}
+function result(g){
+view='result';const pct=Math.round(100*g.correct/g.qs.length);
+let star=0,head='Round over';
+if(g.mode==='quest'){star=g.lives<=0?0:pct>=100?3:pct>=80?2:pct>=60?1:0;head=star?'Zone cleared':'Try again';
+const zr=S.zones[g.zid]||{stars:0};if(star>zr.stars)zr.stars=star;S.zones[g.zid]=zr}
+else head=g.mode==='review'?'Review done':g.mode==='boss'?(pct>=70?'Boss defeated':'The boss wins this time'):'Challenge complete';
+const gain=g.xp+(star*20);S.xp+=gain;S.played++;bumpStreak();save();if(star||pct>=70)sfx.win();
+const ms=g.missed.map(k=>BYK[k]).filter(Boolean);
+mount(`<div class="card center pop"><div class="qtype">${esc(head)}</div><div class="big">${pct}%</div>${g.mode==='quest'?`<div class="stars">${stars(star)}</div>`:''}<p>${g.correct} of ${g.qs.length} correct · best combo ${g.best} · <b>+${gain} XP</b></p>
+${ms.length?`<div class="mist"><b>Fix these next time</b><ul>${ms.map(x=>`<li>${esc(x.q[1])} <b style="color:var(--mint)">${esc(ansText(x.q))}</b></li>`).join('')}</ul></div>`:'<p>No mistakes. Perfect.</p>'}
+<div class="row" style="justify-content:center;margin-top:14px"><button class="btn alt" data-act="home">Map</button><button class="btn go" data-act="again">Play again</button></div></div>`);
+lastGame=g;
+}
+function ansText(q){return q[0]==='m'?q[2][q[3]]:q[0]==='t'?q[2].split(' ')[q[3]]:q[2]}
+let lastGame=null;
+/* ---------- question builder ---------- */
+function buildQ(it,rng){const q=it.q,t=q[0];
+if(t==='m')return{k:it.k,t,text:q[1],opts:shuf(q[2].map((o,i)=>({o,ok:i===q[3]})),rng),exp:q[4]};
+if(t==='t')return{k:it.k,t,text:q[1],words:q[2].split(' '),a:q[3],exp:q[4]};
+let w=q[2].split(' ').map((x,i)=>({w:x,id:i}));let s=shuf(w,rng);if(s.every((x,i)=>x.id===i))s.reverse();
+return{k:it.k,t:'o',text:q[1],words:s,full:q[2],exp:q[3],tray:[]}}
+const QLAB={m:'Choose the answer',t:'Tap the word',o:'Build the sentence'};
+let g=null,D=null,RM=null;
+function startGame(mode,o={}){
+let items=[],seed=null;
+if(mode==='quest'){const z=ZB[o.zid];items=shuf(ALL.filter(x=>x.z===z.id),Math.random).slice(0,8)}
+else if(mode==='boss')items=shuf(ALL,Math.random).slice(0,12);
+else if(mode==='daily'){seed='daily'+today();items=shuf(ALL,rngOf(seed)).slice(0,10)}
+else if(mode==='review'){items=shuf(S.wrong.map(k=>BYK[k]).filter(Boolean),Math.random).slice(0,8);if(!items.length){toast('No mistakes saved yet. Play a zone first.');return}}
+else if(mode==='duel'){seed=o.seed;const pool=o.zn==='mix'?ALL:ALL.filter(x=>x.z===o.zn);items=shuf(pool,rngOf(seed)).slice(0,10)}
+const br=seed?rngOf(seed+'b'):Math.random;
+g={mode,zid:o.zid,zn:o.zn,seed,qs:items.map(it=>buildQ(it,br)),i:0,lives:(mode==='quest'||mode==='boss')?3:99,correct:0,combo:0,best:0,xp:0,missed:[],answered:false,sc:0,t0:0,left:0};
+view='play';renderPlay();showQ();
+}
+function hud(){const dm=g.mode==='duel',h=(g.mode==='quest'||g.mode==='boss')?`<div class="hearts" id="hearts">${'♥'.repeat(Math.max(g.lives,0))}</div>`:'';
+return `<div class="hud"><button class="back" data-act="quit">✕</button><div class="bar"><div id="prog"></div></div>${h}</div>${dm?`<div class="timer"><div id="tbar"></div></div>`:''}`}
+function renderPlay(){
+mount(`${hud()}${g.mode==='duel'?`<div class="vs" id="vs"></div>`:''}<div class="card" id="qa"></div>`);
+if(g.mode==='duel')vsRender();
+}
+function showQ(){
+const q=g.qs[g.i];g.answered=false;g.t0=Date.now();
+$('#prog').style.width=(100*g.i/g.qs.length)+'%';
+let b=`<div class="qtype">Question ${g.i+1} of ${g.qs.length} · ${QLAB[q.t]}${g.combo>1?` · <span class="combo">combo x${g.combo}</span>`:''}</div><div class="q">${esc(q.text)}</div>`;
+if(q.t==='m')b+=`<div class="opts ${q.opts.every(o=>o.o.length<18)?'two':''}">${q.opts.map((o,i)=>`<button class="tile" data-act="pick" data-i="${i}"><span class="k">${'ABCD'[i]}</span>${esc(o.o)}</button>`).join('')}</div>`;
+else if(q.t==='t'){b+=`<p class="note">Read the sentence and tap one word.</p><div class="words">${q.words.map((w,i)=>`<button class="tile" data-act="tag" data-i="${i}">${esc(w)}</button>`).join('')}</div>`}
+else b+=`<div class="tray" id="tray"></div><div class="words" id="bank"></div><button class="btn go" data-act="check" id="chk" disabled>Check</button>`;
+b+=`<div class="fb" id="fb"></div>`;
+$('#qa').innerHTML=b;$('#qa').classList.remove('pop');void $('#qa').offsetWidth;$('#qa').classList.add('pop');
+if(q.t==='o')drawOrder();
+if(g.mode==='duel'){startTimer();dPresence({r:g.i,d:0,ok:null,sc:g.sc})}
+}
+function drawOrder(){const q=g.qs[g.i];
+$('#tray').innerHTML=q.tray.map(x=>`<button class="tile" data-act="untray" data-id="${x.id}">${esc(x.w)}</button>`).join('');
+const inT=new Set(q.tray.map(x=>x.id));
+$('#bank').innerHTML=q.words.filter(x=>!inT.has(x.id)).map(x=>`<button class="tile" data-act="tobank" data-id="${x.id}">${esc(x.w)}</button>`).join('');
+$('#chk').disabled=q.tray.length!==q.words.length}
+function startTimer(){const T=25000;const id=setInterval(()=>{if(!g||g.mode!=='duel'){clearInterval(id);return}
+const left=Math.max(0,T-(Date.now()-g.t0));g.left=left;const tb=$('#tbar');if(tb)tb.style.width=(100*left/T)+'%';
+if(left<=0&&!g.answered){clearInterval(id);answer(false,true)}if(g.answered)clearInterval(id)},100);timers.push(id)}
+function answer(ok,timeout,detail){
+if(g.answered)return;g.answered=true;const q=g.qs[g.i];
+if(ok){g.correct++;g.combo++;g.best=Math.max(g.best,g.combo);g.xp+=10+Math.min(g.combo,5)*2;sfx.ok();S.wrong=S.wrong.filter(k=>k!==q.k)}
+else{g.combo=0;if(g.lives<99)g.lives--;sfx.no();g.missed.push(q.k);if(!S.wrong.includes(q.k))S.wrong.push(q.k);if(S.wrong.length>60)S.wrong.shift();const a=$('#qa');if(a){a.classList.remove('shake');void a.offsetWidth;a.classList.add('shake')}}
+save();const hh=$('#hearts');if(hh)hh.textContent='♥'.repeat(Math.max(g.lives,0));
+let pts=0;if(g.mode==='duel'){pts=ok?100+Math.round(50*(g.left||0)/25000):0;g.sc+=pts;dPresence({r:g.i,d:1,ok:ok?1:0,sc:g.sc})}
+const last=g.i===g.qs.length-1||g.lives<=0;
+const fb=$('#fb');fb.className='fb show '+(ok?'good':'bad');
+fb.innerHTML=`<b>${ok?'Correct':timeout?'Time is up':'Not quite'}${pts?` · +${pts}`:''}</b><p>${esc(q.exp)}${!ok&&q.t==='o'?`<br><b>${esc(q.full)}</b>`:''}</p>`+(g.mode==='duel'?`<p class="note" id="dwait"></p>`:`<button class="btn ${ok?'go':'hot'}" data-act="next">${last?'See result':'Continue'}</button>`);
+$('#prog').style.width=(100*(g.i+1)/g.qs.length)+'%';
+if(g.mode==='duel')duelCheck();
+}
+function nextQ(){
+if(g.mode==='duel'){if(g.i>=g.qs.length-1){duelEnd();return}g.i++;showQ();return}
+if(g.i>=g.qs.length-1||g.lives<=0){result(g);return}g.i++;showQ();
+}
+/* ---------- duel (live, room presence only) ---------- */
+function dPresence(p){if(D&&D.room)D.room.presence(p).catch(()=>{})}
+function opp(){if(!D||!D.room)return null;return D.room.peers().find(p=>!p.isMe&&p.presence&&p.presence.nm)||null}
+function oppDone(r){const o=opp();if(!o)return true;const p=o.presence;return p.r>r||(p.r===r&&p.d===1)}
+function vsRender(){const el=$('#vs');if(!el||!g||g.mode!=='duel')return;const o=opp(),p=o?o.presence:null;
+el.innerHTML=`<div class="pl me"><small>You</small><b>${esc(S.name||'Player')}</b><div class="sc">${g.sc}</div></div><div class="vsx">VS</div><div class="pl opp"><small>${o?(p.d===1&&p.r===g.i?'answered':'thinking'):'left the room'}</small><b>${o?esc(String(p.nm).slice(0,14)):'Partner'}</b><div class="sc">${p&&p.sc?p.sc:0}</div></div>`}
+let adv=null;
+function duelCheck(){vsRender();if(!g||g.mode!=='duel'||!g.answered)return;
+const w=$('#dwait');const last=g.i>=g.qs.length-1;
+if(oppDone(g.i)){if(adv)return;if(w)w.innerHTML=`<button class="btn go" data-act="next">${last?'See result':'Next question'}</button> <span class="note">auto in a moment</span>`;adv=setTimeout(()=>{adv=null;if(g&&g.mode==='duel'&&g.answered)nextQ()},last?3500:4500);timers.push(adv)}
+else if(w)w.textContent='Waiting for your partner to answer...'}
+function duelEnd(){
+const o=opp(),os=o&&o.presence.sc?o.presence.sc:0,nm=o?String(o.presence.nm).slice(0,14):'Partner';
+const S1=g.sc,win=S1>os?'You win':S1<os?nm+' wins':'A draw';const xpg=g.xp+(S1>=os?30:10);S.xp+=xpg;S.played++;bumpStreak();save();sfx.win();
+const gg=g;view='duelend';
+mount(`<div class="card center pop"><div class="qtype">Duel finished</div><div class="big">${esc(win)}</div><div class="vs" style="margin-top:14px"><div class="pl me"><small>You</small><b>${esc(S.name||'Player')}</b><div class="sc">${S1}</div></div><div class="vsx">VS</div><div class="pl opp"><small>${o?'partner':'left'}</small><b>${esc(nm)}</b><div class="sc">${os}</div></div></div><p>You got ${gg.correct} of ${gg.qs.length} right · <b>+${xpg} XP</b> · Team total <b>${S1+os}</b></p><div class="row" style="justify-content:center"><button class="btn alt" data-act="leave">Leave room</button><button class="btn go" data-act="rematch">Back to room</button></div></div>`);
+g=null;
+}
+function duelLobby(){
+view='duel';
+const ok=!!(window.claude&&window.claude.use);
+mount(`<button class="back" data-act="home">‹ Back</button><h2 class="sec" style="margin-top:6px">Duel with your partner</h2><div class="card"><p>You both answer the same ten questions at the same time. Faster correct answers earn more points. Open this page on two devices, then one of you creates a room and the other types the code.</p>
+<div class="namebox"><label for="nm">Your name</label><input type="text" id="nm" maxlength="14" placeholder="Player" value="${esc(S.name)}"></div>
+<div class="row" style="gap:16px;align-items:flex-end"><button class="btn hot" data-act="mkroom">Create a room</button><div class="namebox" style="margin:0"><input type="text" id="jc" maxlength="4" placeholder="CODE" style="width:110px;text-transform:uppercase;letter-spacing:4px"><button class="btn go" data-act="joinroom">Join</button></div></div>
+<p class="note" id="dmsg" style="margin-top:12px">${ok?'Both players open this same website, then one creates a room and the other joins with the code.':'Live play could not start in this browser. Solo modes still work.'}</p></div>`);
+}
+async function enterRoom(code,host){
+const msg=$('#dmsg');
+try{if(!RM){RM=await window.claude.use('room')}}catch(e){RM=null}
+if(!RM){if(msg)msg.textContent='Live rooms are not available in this view. Open the published link from Claude and sign in.';return}
+try{const room=await RM.join('ga-'+code.toLowerCase(),host);
+if(D&&D.un)D.un();
+D={code,room,host,st:0,zn:'mix'};
+room.presence({nm:S.name||'Player',host:host?1:0,r:-1,d:0,sc:0,st:null,zn:'mix'}).catch(()=>{});
+D.un=room.onPeers(()=>{if(view==='wait')waitRender();else if(g&&g.mode==='duel')duelCheck();joinerWatch()});
+view='wait';waitRender();
+}catch(e){if(msg)msg.textContent='Could not join that room. Check the code and try again.'}
+}
+function joinerWatch(){if(!D||D.host||view!=='wait')return;const h=D.room.peers().find(p=>!p.isMe&&p.presence&&p.presence.host===1&&p.presence.st);
+if(h&&h.presence.st!==D.st){D.st=h.presence.st;launchDuel(h.presence.st,h.presence.zn||'mix')}}
+function waitRender(){
+if(!D)return;const o=opp();
+const zsel=D.host?`<div class="namebox" style="justify-content:center"><label for="zsel">Topic</label><select id="zsel" style="background:var(--board2);color:var(--chalk);border:2px solid var(--line);border-radius:10px;padding:9px;font:inherit;font-weight:800;max-width:100%"><option value="mix">All zones mixed</option>${Z.map(z=>`<option value="${z.id}" ${D.zn===z.id?'selected':''}>${esc(z.n)}</option>`).join('')}</select></div>`:'';
+mount(`<div class="card center"><div class="qtype">Room code</div><div class="code">${esc(D.code)}</div><p class="note">Tell your partner this code.</p>
+<div class="vs"><div class="pl me"><small>You</small><b>${esc(S.name||'Player')}</b></div><div class="vsx">VS</div><div class="pl opp"><small>${o?'in the room':'waiting'}</small><b>${o?esc(String(o.presence.nm).slice(0,14)):'...'}</b></div></div>
+${zsel}${D.host?`<button class="btn go" data-act="start" ${o?'':'disabled'}>${o?'Start the duel':'Waiting for partner'}</button>`:`<p>${o?'Waiting for the host to start...':'Joining...'}</p>`}<div style="margin-top:14px"><button class="btn alt" data-act="leave">Leave room</button></div></div>`);
+}
+function launchDuel(st,zn){D.zn=zn;adv=null;dPresence({r:-1,d:0,sc:0,ok:null});startGame('duel',{seed:D.code+':'+st,zn})}
+function hostStart(){const o=opp();if(!o){toast('Your partner has not joined yet');return}
+const zn=($('#zsel')||{}).value||'mix';D.zn=zn;const st=Date.now();D.st=st;dPresence({st,zn,r:-1,d:0,sc:0});launchDuel(st,zn)}
+function leaveRoom(){try{if(D&&D.un)D.un();if(D&&D.room)D.room.leave()}catch(e){}D=null;g=null;home()}
+/* ---------- events ---------- */
+document.addEventListener('click',e=>{
+const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act;
+if(a==='home'){if(D){/* leaving to map keeps room closed */leaveRoom();return}home()}
+else if(a==='snd'){S.snd=!S.snd;save();el.textContent=S.snd?'Sound on':'Sound off';if(S.snd)sfx.ok()}
+else if(a==='lesson')lesson(el.dataset.z,0);
+else if(a==='lnav')lesson(el.dataset.z,+el.dataset.i);
+else if(a==='quest')startGame('quest',{zid:el.dataset.z});
+else if(a==='daily'||a==='boss'||a==='review')startGame(a);
+else if(a==='again'){const l=lastGame;if(l&&l.mode==='quest')startGame('quest',{zid:l.zid});else if(l)startGame(l.mode);else home()}
+else if(a==='quit'){if(g&&g.mode==='duel'){leaveRoom()}else{g=null;home()}}
+else if(a==='next'){if(adv){clearTimeout(adv);adv=null}nextQ()}
+else if(a==='pick'&&g&&!g.answered){const q=g.qs[g.i],i=+el.dataset.i;document.querySelectorAll('#qa .tile').forEach((t,j)=>{t.disabled=true;if(q.opts[j].ok)t.classList.add('ok')});if(!q.opts[i].ok)el.classList.add('no');answer(q.opts[i].ok)}
+else if(a==='tag'&&g&&!g.answered){const q=g.qs[g.i],i=+el.dataset.i,ok=i===q.a;document.querySelectorAll('#qa .tile').forEach((t,j)=>{t.disabled=true;if(j===q.a)t.classList.add('ok')});if(!ok)el.classList.add('no');answer(ok)}
+else if(a==='tobank'&&g&&!g.answered){const q=g.qs[g.i];q.tray.push(q.words.find(x=>x.id===+el.dataset.id));drawOrder()}
+else if(a==='untray'&&g&&!g.answered){const q=g.qs[g.i];q.tray=q.tray.filter(x=>x.id!==+el.dataset.id);drawOrder()}
+else if(a==='check'&&g&&!g.answered){const q=g.qs[g.i];answer(q.tray.map(x=>x.w).join(' ')===q.full);document.querySelectorAll('#qa .tile').forEach(t=>t.disabled=true);el.disabled=true}
+else if(a==='duel')duelLobby();
+else if(a==='mkroom'){const c=Array.from({length:4},()=>'ABCDEFGHJKMNPQRSTUVWXYZ'[Math.floor(Math.random()*23)]).join('');enterRoom(c,true)}
+else if(a==='joinroom'){const c=($('#jc').value||'').trim().toUpperCase();if(c.length!==4){$('#dmsg').textContent='Type the 4-letter code.';return}enterRoom(c,false)}
+else if(a==='start')hostStart();
+else if(a==='leave')leaveRoom();
+else if(a==='rematch'){view='wait';dPresence({r:-1,d:0,sc:0});waitRender();joinerWatch()}
+});
+document.addEventListener('input',e=>{if(e.target.id==='nm'){S.name=e.target.value.slice(0,14);save();dPresence({nm:S.name||'Player'})}});
+document.addEventListener('keydown',e=>{if(!g||g.answered)return;const q=g.qs[g.i];if(q&&q.t==='m'&&'1234'.includes(e.key)&&q.opts[+e.key-1]){const b=document.querySelectorAll('#qa .tile')[+e.key-1];if(b)b.click()}});
+home();
+</script>
+</html>
