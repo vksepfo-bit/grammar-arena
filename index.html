@@ -4,7 +4,40 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Figtree:wght@400;600;800&display=swap">
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.16.1/dist/mqtt.min.js"></script>
+<script>
+/* Live room for the standalone site: public MQTT broker over WebSocket (no account, works across networks) */
+(function(){
+if(window.claude&&window.claude.use)return;
+var B=['wss://broker.emqx.io:8084/mqtt','wss://broker.hivemq.com:8884/mqtt','wss://test.mosquitto.org:8081'];
+var room={join:function(name,host){return new Promise(function(res,rej){
+ if(!window.mqtt){rej(new Error('mqtt'));return}
+ var code=String(name).replace(/^ga-/,'').toLowerCase(),base='gaarena1/'+code+'/',id=Math.random().toString(36).slice(2,10);
+ var me={isMe:true,presence:{}},others=new Map(),ls=new Set(),cl=null,bi=0,done=false,gone=false,hb,pr,ft;
+ var emit=function(){ls.forEach(function(f){try{f()}catch(e){}})};
+ var pub=function(){if(cl&&cl.connected)cl.publish(base+id,JSON.stringify({p:me.presence}),{retain:true,qos:0})};
+ var list=function(){return Array.from(others.values()).filter(function(o){return o.presence&&o.presence.nm}).sort(function(a,b){return b.seen-a.seen})};
+ var api={peers:function(){var o=list()[0];return o?[me,o]:[me]},
+  presence:function(p){for(var k in p){if(p[k]===null)delete me.presence[k];else me.presence[k]=p[k]}pub();emit();return Promise.resolve()},
+  onPeers:function(f){ls.add(f);return function(){ls.delete(f)}},
+  leave:function(){gone=true;clearInterval(hb);clearInterval(pr);clearTimeout(ft);try{cl.publish(base+id,'',{retain:true});setTimeout(function(){try{cl.end(true)}catch(e){}},300)}catch(e){}return Promise.resolve()}};
+ function fail(e){if(!done){done=true;gone=true;clearInterval(hb);clearInterval(pr);clearTimeout(ft);try{cl.end(true)}catch(_){}rej(e)}}
+ function ok(){if(!done){done=true;res(api)}}
+ function connect(){
+  cl=mqtt.connect(B[bi%B.length],{clientId:'ga'+id+bi,reconnectPeriod:2500,connectTimeout:6000,keepalive:30,will:{topic:base+id,payload:'',retain:true,qos:0}});
+  cl.on('connect',function(){clearTimeout(ft);cl.subscribe(base+'+',function(err){if(err){fail(err);return}pub();
+    if(host)ok();else{var t0=Date.now(),w=setInterval(function(){var h=list().find(function(o){return o.presence.host===1});if(h){clearInterval(w);ok()}else if(Date.now()-t0>6000){clearInterval(w);fail(new Error('noroom'))}},250)}})});
+  cl.on('message',function(t,m){var pid=t.slice(base.length);if(pid===id)return;var s=m.toString();if(!s)others.delete(pid);else{try{others.set(pid,{isMe:false,presence:JSON.parse(s).p||{},seen:Date.now()})}catch(e){}}emit()});
+  cl.on('error',function(){});
+  ft=setTimeout(function(){if(!done&&!gone&&!cl.connected){try{cl.end(true)}catch(e){}bi++;if(bi>=B.length*2)fail(new Error('broker'));else connect()}},7000);
+ }
+ connect();
+ hb=setInterval(function(){pub()},8000);
+ pr=setInterval(function(){var n=Date.now(),ch=false;others.forEach(function(o,k){if(n-o.seen>90000){others.delete(k);ch=true}});if(ch)emit()},4000);
+})}};
+window.claude={use:function(n){return Promise.resolve(n==='room'?room:null)}};
+})();
+</script>
 <style>
 /* Layout: chalkboard app, one centered column; answers are Scrabble-style tiles */
 :root{--board:#10302b;--board2:#17433b;--line:#2c5f55;--chalk:#f2efe6;--dim:#a3beb6;--tile:#f1dfb4;--tile2:#e4cd96;--ink:#3a2a14;--coral:#ff7a59;--mint:#6fe0b0;--sky:#7cc4ff;--rose:#ff9ec0;--bad:#ff6b6b;--f1:'Fraunces',Georgia,serif;--f2:'Figtree',system-ui,sans-serif;color-scheme:dark}
@@ -119,22 +152,22 @@ h2.sec{font-size:26px;margin:26px 0 10px}
 (function(){
 if(window.claude&&window.claude.use)return;
 const room={join:(code,host)=>new Promise((res,rej)=>{
-if(!window.Peer){rej(new Error('peerjs'));return}
-let conn=null,other=null,peer=null,done=false;const ls=new Set(),me={isMe:true,presence:{}};
-const emit=()=>ls.forEach(f=>{try{f()}catch(e){}});
-const fail=e=>{if(!done){done=true;try{peer&&peer.destroy()}catch(_){}rej(e)}};
-const api={peers:()=>other?[me,other]:[me],
-presence:async p=>{for(const k in p){if(p[k]===null)delete me.presence[k];else me.presence[k]=p[k]}if(conn&&conn.open)conn.send({p:Object.assign({},me.presence)});emit()},
-onPeers:f=>{ls.add(f);return()=>ls.delete(f)},
-leave:async()=>{try{peer.destroy()}catch(e){}}};
-const attach=c=>{conn=c;
-c.on('data',d=>{if(d&&d.p){other={isMe:false,presence:d.p};emit()}});
-c.on('close',()=>{other=null;emit()});c.on('error',()=>{});
-const hi=()=>c.send({p:Object.assign({},me.presence)});c.open?hi():c.on('open',hi)};
-const id='gaarena-'+String(code).replace(/^ga-/,'').toLowerCase();
-const ok=()=>{if(!done){done=true;res(api)}};
-if(host){peer=new Peer(id);peer.on('open',ok);peer.on('connection',c=>{if(conn&&conn.open){c.close();return}attach(c)});peer.on('error',fail)}
-else{peer=new Peer();peer.on('open',()=>{const c=peer.connect(id,{reliable:true});c.on('open',()=>{attach(c);ok()});c.on('error',fail)});peer.on('error',fail);setTimeout(()=>fail(new Error('timeout')),12000)}
+  if(!window.Peer){rej(new Error('peerjs'));return}
+  let conn=null,other=null,peer=null,done=false;const ls=new Set(),me={isMe:true,presence:{}};
+  const emit=()=>ls.forEach(f=>{try{f()}catch(e){}});
+  const fail=e=>{if(!done){done=true;try{peer&&peer.destroy()}catch(_){}rej(e)}};
+  const api={peers:()=>other?[me,other]:[me],
+    presence:async p=>{for(const k in p){if(p[k]===null)delete me.presence[k];else me.presence[k]=p[k]}if(conn&&conn.open)conn.send({p:Object.assign({},me.presence)});emit()},
+    onPeers:f=>{ls.add(f);return()=>ls.delete(f)},
+    leave:async()=>{try{peer.destroy()}catch(e){}}};
+  const attach=c=>{conn=c;
+    c.on('data',d=>{if(d&&d.p){other={isMe:false,presence:d.p};emit()}});
+    c.on('close',()=>{other=null;emit()});c.on('error',()=>{});
+    const hi=()=>c.send({p:Object.assign({},me.presence)});c.open?hi():c.on('open',hi)};
+  const id='gaarena-'+String(code).replace(/^ga-/,'').toLowerCase();
+  const ok=()=>{if(!done){done=true;res(api)}};
+  if(host){peer=new Peer(id);peer.on('open',ok);peer.on('connection',c=>{if(conn&&conn.open){c.close();return}attach(c)});peer.on('error',fail)}
+  else{peer=new Peer();peer.on('open',()=>{const c=peer.connect(id,{reliable:true});c.on('open',()=>{attach(c);ok()});c.on('error',fail)});peer.on('error',fail);setTimeout(()=>fail(new Error('timeout')),12000)}
 })};
 window.claude={use:async n=>n==='room'?room:null};
 })();
@@ -331,175 +364,175 @@ function mount(html){clearTimers();$('#app').innerHTML=topbar()+html;window.scro
 function stars(n){return '★'.repeat(n)+'☆'.repeat(3-n)}
 function unlocked(i){return i===0||((S.zones[Z[i-1].id]||{}).stars||0)>=1}
 function home(){
-view='home';
-const zs=Z.map((z,i)=>{const st=(S.zones[z.id]||{}).stars||0,u=unlocked(i);
-return `<div class="zone ${u?'':'lock'}"><div class="ic" style="background:${z.c}">${z.ic}</div><b>${esc(z.n)}</b><small>${esc(z.d)}</small><span class="st">${stars(st)}</span><div class="acts"><button class="btn alt" data-act="lesson" data-z="${z.id}">Lesson</button><button class="btn go" data-act="quest" data-z="${z.id}" ${u?'':'disabled'}>${u?'Play':'Locked'}</button></div></div>`}).join('');
-const nw=S.wrong.length;
-mount(`<div class="hero"><h1>Learn grammar by <em>playing</em>.</h1><p>Nine zones from Wren &amp; Martin Book I. Read a quick lesson, win the round, unlock the next zone. Then challenge your wife live.</p></div>
-<div class="namebox"><label for="nm">Your name</label><input type="text" id="nm" maxlength="14" placeholder="Player" value="${esc(S.name)}"></div>
-<div class="modes">
-<button class="mode duel" data-act="duel"><span class="tag">Live, 2 players</span><b>Duel with partner</b><span>Same questions, same time, two screens. Share a room code.</span></button>
-<button class="mode" data-act="daily"><b>Daily Challenge</b><span>10 mixed questions, new set every day.</span></button>
-<button class="mode" data-act="boss"><b>Boss Battle</b><span>12 mixed questions from every zone. 3 lives.</span></button>
-<button class="mode" data-act="review"><b>Review Mistakes</b><span>${nw?nw+' question'+(nw>1?'s':'')+' to fix. Clear them all.':'Nothing yet. Missed questions land here.'}</span></button>
-</div>
-<h2 class="sec">Quest Map</h2><div class="zones">${zs}</div>
-<p class="note" style="margin-top:22px">Progress is saved in this browser. Each round gives XP, and a streak counts days played in a row.</p>`);
+  view='home';
+  const zs=Z.map((z,i)=>{const st=(S.zones[z.id]||{}).stars||0,u=unlocked(i);
+   return `<div class="zone ${u?'':'lock'}"><div class="ic" style="background:${z.c}">${z.ic}</div><b>${esc(z.n)}</b><small>${esc(z.d)}</small><span class="st">${stars(st)}</span><div class="acts"><button class="btn alt" data-act="lesson" data-z="${z.id}">Lesson</button><button class="btn go" data-act="quest" data-z="${z.id}" ${u?'':'disabled'}>${u?'Play':'Locked'}</button></div></div>`}).join('');
+  const nw=S.wrong.length;
+  mount(`<div class="hero"><h1>Learn grammar by <em>playing</em>.</h1><p>Nine zones from Wren &amp; Martin Book I. Read a quick lesson, win the round, unlock the next zone. Then challenge your wife live.</p></div>
+  <div class="namebox"><label for="nm">Your name</label><input type="text" id="nm" maxlength="14" placeholder="Player" value="${esc(S.name)}"></div>
+  <div class="modes">
+   <button class="mode duel" data-act="duel"><span class="tag">Live, 2 players</span><b>Duel with partner</b><span>Same questions, same time, two screens. Share a room code.</span></button>
+   <button class="mode" data-act="daily"><b>Daily Challenge</b><span>10 mixed questions, new set every day.</span></button>
+   <button class="mode" data-act="boss"><b>Boss Battle</b><span>12 mixed questions from every zone. 3 lives.</span></button>
+   <button class="mode" data-act="review"><b>Review Mistakes</b><span>${nw?nw+' question'+(nw>1?'s':'')+' to fix. Clear them all.':'Nothing yet. Missed questions land here.'}</span></button>
+  </div>
+  <h2 class="sec">Quest Map</h2><div class="zones">${zs}</div>
+  <p class="note" style="margin-top:22px">Progress is saved in this browser. Each round gives XP, and a streak counts days played in a row.</p>`);
 }
 function lesson(zid,idx=0){
-const z=ZB[zid],L=z.L[idx];view='lesson';
-mount(`<button class="back" data-act="home">‹ Back to map</button><div class="qtype" style="margin-top:6px">${esc(z.n)} · Lesson ${idx+1} of ${z.L.length}</div><div class="lcard pop"><h3>${esc(L[0])}</h3>${L[1]}</div><div class="dots">${z.L.map((_,i)=>`<i class="${i===idx?'on':''}"></i>`).join('')}</div><div class="row"><button class="btn alt" data-act="lnav" data-z="${zid}" data-i="${idx-1}" ${idx?'':'disabled'}>‹ Previous</button>${idx<z.L.length-1?`<button class="btn" data-act="lnav" data-z="${zid}" data-i="${idx+1}">Next ›</button>`:`<button class="btn go" data-act="quest" data-z="${zid}">Play this zone</button>`}</div>`);
+  const z=ZB[zid],L=z.L[idx];view='lesson';
+  mount(`<button class="back" data-act="home">‹ Back to map</button><div class="qtype" style="margin-top:6px">${esc(z.n)} · Lesson ${idx+1} of ${z.L.length}</div><div class="lcard pop"><h3>${esc(L[0])}</h3>${L[1]}</div><div class="dots">${z.L.map((_,i)=>`<i class="${i===idx?'on':''}"></i>`).join('')}</div><div class="row"><button class="btn alt" data-act="lnav" data-z="${zid}" data-i="${idx-1}" ${idx?'':'disabled'}>‹ Previous</button>${idx<z.L.length-1?`<button class="btn" data-act="lnav" data-z="${zid}" data-i="${idx+1}">Next ›</button>`:`<button class="btn go" data-act="quest" data-z="${zid}">Play this zone</button>`}</div>`);
 }
 function result(g){
-view='result';const pct=Math.round(100*g.correct/g.qs.length);
-let star=0,head='Round over';
-if(g.mode==='quest'){star=g.lives<=0?0:pct>=100?3:pct>=80?2:pct>=60?1:0;head=star?'Zone cleared':'Try again';
-const zr=S.zones[g.zid]||{stars:0};if(star>zr.stars)zr.stars=star;S.zones[g.zid]=zr}
-else head=g.mode==='review'?'Review done':g.mode==='boss'?(pct>=70?'Boss defeated':'The boss wins this time'):'Challenge complete';
-const gain=g.xp+(star*20);S.xp+=gain;S.played++;bumpStreak();save();if(star||pct>=70)sfx.win();
-const ms=g.missed.map(k=>BYK[k]).filter(Boolean);
-mount(`<div class="card center pop"><div class="qtype">${esc(head)}</div><div class="big">${pct}%</div>${g.mode==='quest'?`<div class="stars">${stars(star)}</div>`:''}<p>${g.correct} of ${g.qs.length} correct · best combo ${g.best} · <b>+${gain} XP</b></p>
-${ms.length?`<div class="mist"><b>Fix these next time</b><ul>${ms.map(x=>`<li>${esc(x.q[1])} <b style="color:var(--mint)">${esc(ansText(x.q))}</b></li>`).join('')}</ul></div>`:'<p>No mistakes. Perfect.</p>'}
-<div class="row" style="justify-content:center;margin-top:14px"><button class="btn alt" data-act="home">Map</button><button class="btn go" data-act="again">Play again</button></div></div>`);
-lastGame=g;
+  view='result';const pct=Math.round(100*g.correct/g.qs.length);
+  let star=0,head='Round over';
+  if(g.mode==='quest'){star=g.lives<=0?0:pct>=100?3:pct>=80?2:pct>=60?1:0;head=star?'Zone cleared':'Try again';
+   const zr=S.zones[g.zid]||{stars:0};if(star>zr.stars)zr.stars=star;S.zones[g.zid]=zr}
+  else head=g.mode==='review'?'Review done':g.mode==='boss'?(pct>=70?'Boss defeated':'The boss wins this time'):'Challenge complete';
+  const gain=g.xp+(star*20);S.xp+=gain;S.played++;bumpStreak();save();if(star||pct>=70)sfx.win();
+  const ms=g.missed.map(k=>BYK[k]).filter(Boolean);
+  mount(`<div class="card center pop"><div class="qtype">${esc(head)}</div><div class="big">${pct}%</div>${g.mode==='quest'?`<div class="stars">${stars(star)}</div>`:''}<p>${g.correct} of ${g.qs.length} correct · best combo ${g.best} · <b>+${gain} XP</b></p>
+  ${ms.length?`<div class="mist"><b>Fix these next time</b><ul>${ms.map(x=>`<li>${esc(x.q[1])} <b style="color:var(--mint)">${esc(ansText(x.q))}</b></li>`).join('')}</ul></div>`:'<p>No mistakes. Perfect.</p>'}
+  <div class="row" style="justify-content:center;margin-top:14px"><button class="btn alt" data-act="home">Map</button><button class="btn go" data-act="again">Play again</button></div></div>`);
+  lastGame=g;
 }
 function ansText(q){return q[0]==='m'?q[2][q[3]]:q[0]==='t'?q[2].split(' ')[q[3]]:q[2]}
 let lastGame=null;
 /* ---------- question builder ---------- */
 function buildQ(it,rng){const q=it.q,t=q[0];
-if(t==='m')return{k:it.k,t,text:q[1],opts:shuf(q[2].map((o,i)=>({o,ok:i===q[3]})),rng),exp:q[4]};
-if(t==='t')return{k:it.k,t,text:q[1],words:q[2].split(' '),a:q[3],exp:q[4]};
-let w=q[2].split(' ').map((x,i)=>({w:x,id:i}));let s=shuf(w,rng);if(s.every((x,i)=>x.id===i))s.reverse();
-return{k:it.k,t:'o',text:q[1],words:s,full:q[2],exp:q[3],tray:[]}}
+ if(t==='m')return{k:it.k,t,text:q[1],opts:shuf(q[2].map((o,i)=>({o,ok:i===q[3]})),rng),exp:q[4]};
+ if(t==='t')return{k:it.k,t,text:q[1],words:q[2].split(' '),a:q[3],exp:q[4]};
+ let w=q[2].split(' ').map((x,i)=>({w:x,id:i}));let s=shuf(w,rng);if(s.every((x,i)=>x.id===i))s.reverse();
+ return{k:it.k,t:'o',text:q[1],words:s,full:q[2],exp:q[3],tray:[]}}
 const QLAB={m:'Choose the answer',t:'Tap the word',o:'Build the sentence'};
 let g=null,D=null,RM=null;
 function startGame(mode,o={}){
-let items=[],seed=null;
-if(mode==='quest'){const z=ZB[o.zid];items=shuf(ALL.filter(x=>x.z===z.id),Math.random).slice(0,8)}
-else if(mode==='boss')items=shuf(ALL,Math.random).slice(0,12);
-else if(mode==='daily'){seed='daily'+today();items=shuf(ALL,rngOf(seed)).slice(0,10)}
-else if(mode==='review'){items=shuf(S.wrong.map(k=>BYK[k]).filter(Boolean),Math.random).slice(0,8);if(!items.length){toast('No mistakes saved yet. Play a zone first.');return}}
-else if(mode==='duel'){seed=o.seed;const pool=o.zn==='mix'?ALL:ALL.filter(x=>x.z===o.zn);items=shuf(pool,rngOf(seed)).slice(0,10)}
-const br=seed?rngOf(seed+'b'):Math.random;
-g={mode,zid:o.zid,zn:o.zn,seed,qs:items.map(it=>buildQ(it,br)),i:0,lives:(mode==='quest'||mode==='boss')?3:99,correct:0,combo:0,best:0,xp:0,missed:[],answered:false,sc:0,t0:0,left:0};
-view='play';renderPlay();showQ();
+  let items=[],seed=null;
+  if(mode==='quest'){const z=ZB[o.zid];items=shuf(ALL.filter(x=>x.z===z.id),Math.random).slice(0,8)}
+  else if(mode==='boss')items=shuf(ALL,Math.random).slice(0,12);
+  else if(mode==='daily'){seed='daily'+today();items=shuf(ALL,rngOf(seed)).slice(0,10)}
+  else if(mode==='review'){items=shuf(S.wrong.map(k=>BYK[k]).filter(Boolean),Math.random).slice(0,8);if(!items.length){toast('No mistakes saved yet. Play a zone first.');return}}
+  else if(mode==='duel'){seed=o.seed;const pool=o.zn==='mix'?ALL:ALL.filter(x=>x.z===o.zn);items=shuf(pool,rngOf(seed)).slice(0,10)}
+  const br=seed?rngOf(seed+'b'):Math.random;
+  g={mode,zid:o.zid,zn:o.zn,seed,qs:items.map(it=>buildQ(it,br)),i:0,lives:(mode==='quest'||mode==='boss')?3:99,correct:0,combo:0,best:0,xp:0,missed:[],answered:false,sc:0,t0:0,left:0};
+  view='play';renderPlay();showQ();
 }
 function hud(){const dm=g.mode==='duel',h=(g.mode==='quest'||g.mode==='boss')?`<div class="hearts" id="hearts">${'♥'.repeat(Math.max(g.lives,0))}</div>`:'';
-return `<div class="hud"><button class="back" data-act="quit">✕</button><div class="bar"><div id="prog"></div></div>${h}</div>${dm?`<div class="timer"><div id="tbar"></div></div>`:''}`}
+ return `<div class="hud"><button class="back" data-act="quit">✕</button><div class="bar"><div id="prog"></div></div>${h}</div>${dm?`<div class="timer"><div id="tbar"></div></div>`:''}`}
 function renderPlay(){
-mount(`${hud()}${g.mode==='duel'?`<div class="vs" id="vs"></div>`:''}<div class="card" id="qa"></div>`);
-if(g.mode==='duel')vsRender();
+  mount(`${hud()}${g.mode==='duel'?`<div class="vs" id="vs"></div>`:''}<div class="card" id="qa"></div>`);
+  if(g.mode==='duel')vsRender();
 }
 function showQ(){
-const q=g.qs[g.i];g.answered=false;g.t0=Date.now();
-$('#prog').style.width=(100*g.i/g.qs.length)+'%';
-let b=`<div class="qtype">Question ${g.i+1} of ${g.qs.length} · ${QLAB[q.t]}${g.combo>1?` · <span class="combo">combo x${g.combo}</span>`:''}</div><div class="q">${esc(q.text)}</div>`;
-if(q.t==='m')b+=`<div class="opts ${q.opts.every(o=>o.o.length<18)?'two':''}">${q.opts.map((o,i)=>`<button class="tile" data-act="pick" data-i="${i}"><span class="k">${'ABCD'[i]}</span>${esc(o.o)}</button>`).join('')}</div>`;
-else if(q.t==='t'){b+=`<p class="note">Read the sentence and tap one word.</p><div class="words">${q.words.map((w,i)=>`<button class="tile" data-act="tag" data-i="${i}">${esc(w)}</button>`).join('')}</div>`}
-else b+=`<div class="tray" id="tray"></div><div class="words" id="bank"></div><button class="btn go" data-act="check" id="chk" disabled>Check</button>`;
-b+=`<div class="fb" id="fb"></div>`;
-$('#qa').innerHTML=b;$('#qa').classList.remove('pop');void $('#qa').offsetWidth;$('#qa').classList.add('pop');
-if(q.t==='o')drawOrder();
-if(g.mode==='duel'){startTimer();dPresence({r:g.i,d:0,ok:null,sc:g.sc})}
+  const q=g.qs[g.i];g.answered=false;g.t0=Date.now();
+  $('#prog').style.width=(100*g.i/g.qs.length)+'%';
+  let b=`<div class="qtype">Question ${g.i+1} of ${g.qs.length} · ${QLAB[q.t]}${g.combo>1?` · <span class="combo">combo x${g.combo}</span>`:''}</div><div class="q">${esc(q.text)}</div>`;
+  if(q.t==='m')b+=`<div class="opts ${q.opts.every(o=>o.o.length<18)?'two':''}">${q.opts.map((o,i)=>`<button class="tile" data-act="pick" data-i="${i}"><span class="k">${'ABCD'[i]}</span>${esc(o.o)}</button>`).join('')}</div>`;
+  else if(q.t==='t'){b+=`<p class="note">Read the sentence and tap one word.</p><div class="words">${q.words.map((w,i)=>`<button class="tile" data-act="tag" data-i="${i}">${esc(w)}</button>`).join('')}</div>`}
+  else b+=`<div class="tray" id="tray"></div><div class="words" id="bank"></div><button class="btn go" data-act="check" id="chk" disabled>Check</button>`;
+  b+=`<div class="fb" id="fb"></div>`;
+  $('#qa').innerHTML=b;$('#qa').classList.remove('pop');void $('#qa').offsetWidth;$('#qa').classList.add('pop');
+  if(q.t==='o')drawOrder();
+  if(g.mode==='duel'){startTimer();dPresence({r:g.i,d:0,ok:null,sc:g.sc})}
 }
 function drawOrder(){const q=g.qs[g.i];
-$('#tray').innerHTML=q.tray.map(x=>`<button class="tile" data-act="untray" data-id="${x.id}">${esc(x.w)}</button>`).join('');
-const inT=new Set(q.tray.map(x=>x.id));
-$('#bank').innerHTML=q.words.filter(x=>!inT.has(x.id)).map(x=>`<button class="tile" data-act="tobank" data-id="${x.id}">${esc(x.w)}</button>`).join('');
-$('#chk').disabled=q.tray.length!==q.words.length}
+  $('#tray').innerHTML=q.tray.map(x=>`<button class="tile" data-act="untray" data-id="${x.id}">${esc(x.w)}</button>`).join('');
+  const inT=new Set(q.tray.map(x=>x.id));
+  $('#bank').innerHTML=q.words.filter(x=>!inT.has(x.id)).map(x=>`<button class="tile" data-act="tobank" data-id="${x.id}">${esc(x.w)}</button>`).join('');
+  $('#chk').disabled=q.tray.length!==q.words.length}
 function startTimer(){const T=25000;const id=setInterval(()=>{if(!g||g.mode!=='duel'){clearInterval(id);return}
-const left=Math.max(0,T-(Date.now()-g.t0));g.left=left;const tb=$('#tbar');if(tb)tb.style.width=(100*left/T)+'%';
-if(left<=0&&!g.answered){clearInterval(id);answer(false,true)}if(g.answered)clearInterval(id)},100);timers.push(id)}
+  const left=Math.max(0,T-(Date.now()-g.t0));g.left=left;const tb=$('#tbar');if(tb)tb.style.width=(100*left/T)+'%';
+  if(left<=0&&!g.answered){clearInterval(id);answer(false,true)}if(g.answered)clearInterval(id)},100);timers.push(id)}
 function answer(ok,timeout,detail){
-if(g.answered)return;g.answered=true;const q=g.qs[g.i];
-if(ok){g.correct++;g.combo++;g.best=Math.max(g.best,g.combo);g.xp+=10+Math.min(g.combo,5)*2;sfx.ok();S.wrong=S.wrong.filter(k=>k!==q.k)}
-else{g.combo=0;if(g.lives<99)g.lives--;sfx.no();g.missed.push(q.k);if(!S.wrong.includes(q.k))S.wrong.push(q.k);if(S.wrong.length>60)S.wrong.shift();const a=$('#qa');if(a){a.classList.remove('shake');void a.offsetWidth;a.classList.add('shake')}}
-save();const hh=$('#hearts');if(hh)hh.textContent='♥'.repeat(Math.max(g.lives,0));
-let pts=0;if(g.mode==='duel'){pts=ok?100+Math.round(50*(g.left||0)/25000):0;g.sc+=pts;dPresence({r:g.i,d:1,ok:ok?1:0,sc:g.sc})}
-const last=g.i===g.qs.length-1||g.lives<=0;
-const fb=$('#fb');fb.className='fb show '+(ok?'good':'bad');
-fb.innerHTML=`<b>${ok?'Correct':timeout?'Time is up':'Not quite'}${pts?` · +${pts}`:''}</b><p>${esc(q.exp)}${!ok&&q.t==='o'?`<br><b>${esc(q.full)}</b>`:''}</p>`+(g.mode==='duel'?`<p class="note" id="dwait"></p>`:`<button class="btn ${ok?'go':'hot'}" data-act="next">${last?'See result':'Continue'}</button>`);
-$('#prog').style.width=(100*(g.i+1)/g.qs.length)+'%';
-if(g.mode==='duel')duelCheck();
+  if(g.answered)return;g.answered=true;const q=g.qs[g.i];
+  if(ok){g.correct++;g.combo++;g.best=Math.max(g.best,g.combo);g.xp+=10+Math.min(g.combo,5)*2;sfx.ok();S.wrong=S.wrong.filter(k=>k!==q.k)}
+  else{g.combo=0;if(g.lives<99)g.lives--;sfx.no();g.missed.push(q.k);if(!S.wrong.includes(q.k))S.wrong.push(q.k);if(S.wrong.length>60)S.wrong.shift();const a=$('#qa');if(a){a.classList.remove('shake');void a.offsetWidth;a.classList.add('shake')}}
+  save();const hh=$('#hearts');if(hh)hh.textContent='♥'.repeat(Math.max(g.lives,0));
+  let pts=0;if(g.mode==='duel'){pts=ok?100+Math.round(50*(g.left||0)/25000):0;g.sc+=pts;dPresence({r:g.i,d:1,ok:ok?1:0,sc:g.sc})}
+  const last=g.i===g.qs.length-1||g.lives<=0;
+  const fb=$('#fb');fb.className='fb show '+(ok?'good':'bad');
+  fb.innerHTML=`<b>${ok?'Correct':timeout?'Time is up':'Not quite'}${pts?` · +${pts}`:''}</b><p>${esc(q.exp)}${!ok&&q.t==='o'?`<br><b>${esc(q.full)}</b>`:''}</p>`+(g.mode==='duel'?`<p class="note" id="dwait"></p>`:`<button class="btn ${ok?'go':'hot'}" data-act="next">${last?'See result':'Continue'}</button>`);
+  $('#prog').style.width=(100*(g.i+1)/g.qs.length)+'%';
+  if(g.mode==='duel')duelCheck();
 }
 function nextQ(){
-if(g.mode==='duel'){if(g.i>=g.qs.length-1){duelEnd();return}g.i++;showQ();return}
-if(g.i>=g.qs.length-1||g.lives<=0){result(g);return}g.i++;showQ();
+  if(g.mode==='duel'){if(g.i>=g.qs.length-1){duelEnd();return}g.i++;showQ();return}
+  if(g.i>=g.qs.length-1||g.lives<=0){result(g);return}g.i++;showQ();
 }
 /* ---------- duel (live, room presence only) ---------- */
 function dPresence(p){if(D&&D.room)D.room.presence(p).catch(()=>{})}
 function opp(){if(!D||!D.room)return null;return D.room.peers().find(p=>!p.isMe&&p.presence&&p.presence.nm)||null}
 function oppDone(r){const o=opp();if(!o)return true;const p=o.presence;return p.r>r||(p.r===r&&p.d===1)}
 function vsRender(){const el=$('#vs');if(!el||!g||g.mode!=='duel')return;const o=opp(),p=o?o.presence:null;
-el.innerHTML=`<div class="pl me"><small>You</small><b>${esc(S.name||'Player')}</b><div class="sc">${g.sc}</div></div><div class="vsx">VS</div><div class="pl opp"><small>${o?(p.d===1&&p.r===g.i?'answered':'thinking'):'left the room'}</small><b>${o?esc(String(p.nm).slice(0,14)):'Partner'}</b><div class="sc">${p&&p.sc?p.sc:0}</div></div>`}
+  el.innerHTML=`<div class="pl me"><small>You</small><b>${esc(S.name||'Player')}</b><div class="sc">${g.sc}</div></div><div class="vsx">VS</div><div class="pl opp"><small>${o?(p.d===1&&p.r===g.i?'answered':'thinking'):'left the room'}</small><b>${o?esc(String(p.nm).slice(0,14)):'Partner'}</b><div class="sc">${p&&p.sc?p.sc:0}</div></div>`}
 let adv=null;
 function duelCheck(){vsRender();if(!g||g.mode!=='duel'||!g.answered)return;
-const w=$('#dwait');const last=g.i>=g.qs.length-1;
-if(oppDone(g.i)){if(adv)return;if(w)w.innerHTML=`<button class="btn go" data-act="next">${last?'See result':'Next question'}</button> <span class="note">auto in a moment</span>`;adv=setTimeout(()=>{adv=null;if(g&&g.mode==='duel'&&g.answered)nextQ()},last?3500:4500);timers.push(adv)}
-else if(w)w.textContent='Waiting for your partner to answer...'}
+  const w=$('#dwait');const last=g.i>=g.qs.length-1;
+  if(oppDone(g.i)){if(adv)return;if(w)w.innerHTML=`<button class="btn go" data-act="next">${last?'See result':'Next question'}</button> <span class="note">auto in a moment</span>`;adv=setTimeout(()=>{adv=null;if(g&&g.mode==='duel'&&g.answered)nextQ()},last?3500:4500);timers.push(adv)}
+  else if(w)w.textContent='Waiting for your partner to answer...'}
 function duelEnd(){
-const o=opp(),os=o&&o.presence.sc?o.presence.sc:0,nm=o?String(o.presence.nm).slice(0,14):'Partner';
-const S1=g.sc,win=S1>os?'You win':S1<os?nm+' wins':'A draw';const xpg=g.xp+(S1>=os?30:10);S.xp+=xpg;S.played++;bumpStreak();save();sfx.win();
-const gg=g;view='duelend';
-mount(`<div class="card center pop"><div class="qtype">Duel finished</div><div class="big">${esc(win)}</div><div class="vs" style="margin-top:14px"><div class="pl me"><small>You</small><b>${esc(S.name||'Player')}</b><div class="sc">${S1}</div></div><div class="vsx">VS</div><div class="pl opp"><small>${o?'partner':'left'}</small><b>${esc(nm)}</b><div class="sc">${os}</div></div></div><p>You got ${gg.correct} of ${gg.qs.length} right · <b>+${xpg} XP</b> · Team total <b>${S1+os}</b></p><div class="row" style="justify-content:center"><button class="btn alt" data-act="leave">Leave room</button><button class="btn go" data-act="rematch">Back to room</button></div></div>`);
-g=null;
+  const o=opp(),os=o&&o.presence.sc?o.presence.sc:0,nm=o?String(o.presence.nm).slice(0,14):'Partner';
+  const S1=g.sc,win=S1>os?'You win':S1<os?nm+' wins':'A draw';const xpg=g.xp+(S1>=os?30:10);S.xp+=xpg;S.played++;bumpStreak();save();sfx.win();
+  const gg=g;view='duelend';
+  mount(`<div class="card center pop"><div class="qtype">Duel finished</div><div class="big">${esc(win)}</div><div class="vs" style="margin-top:14px"><div class="pl me"><small>You</small><b>${esc(S.name||'Player')}</b><div class="sc">${S1}</div></div><div class="vsx">VS</div><div class="pl opp"><small>${o?'partner':'left'}</small><b>${esc(nm)}</b><div class="sc">${os}</div></div></div><p>You got ${gg.correct} of ${gg.qs.length} right · <b>+${xpg} XP</b> · Team total <b>${S1+os}</b></p><div class="row" style="justify-content:center"><button class="btn alt" data-act="leave">Leave room</button><button class="btn go" data-act="rematch">Back to room</button></div></div>`);
+  g=null;
 }
 function duelLobby(){
-view='duel';
-const ok=!!(window.claude&&window.claude.use);
-mount(`<button class="back" data-act="home">‹ Back</button><h2 class="sec" style="margin-top:6px">Duel with your partner</h2><div class="card"><p>You both answer the same ten questions at the same time. Faster correct answers earn more points. Open this page on two devices, then one of you creates a room and the other types the code.</p>
-<div class="namebox"><label for="nm">Your name</label><input type="text" id="nm" maxlength="14" placeholder="Player" value="${esc(S.name)}"></div>
-<div class="row" style="gap:16px;align-items:flex-end"><button class="btn hot" data-act="mkroom">Create a room</button><div class="namebox" style="margin:0"><input type="text" id="jc" maxlength="4" placeholder="CODE" style="width:110px;text-transform:uppercase;letter-spacing:4px"><button class="btn go" data-act="joinroom">Join</button></div></div>
-<p class="note" id="dmsg" style="margin-top:12px">${ok?'Both players open this same website, then one creates a room and the other joins with the code.':'Live play could not start in this browser. Solo modes still work.'}</p></div>`);
+  view='duel';
+  const ok=!!(window.claude&&window.claude.use);
+  mount(`<button class="back" data-act="home">‹ Back</button><h2 class="sec" style="margin-top:6px">Duel with your partner</h2><div class="card"><p>You both answer the same ten questions at the same time. Faster correct answers earn more points. Open this page on two devices, then one of you creates a room and the other types the code.</p>
+  <div class="namebox"><label for="nm">Your name</label><input type="text" id="nm" maxlength="14" placeholder="Player" value="${esc(S.name)}"></div>
+  <div class="row" style="gap:16px;align-items:flex-end"><button class="btn hot" data-act="mkroom">Create a room</button><div class="namebox" style="margin:0"><input type="text" id="jc" maxlength="4" placeholder="CODE" style="width:110px;text-transform:uppercase;letter-spacing:4px"><button class="btn go" data-act="joinroom">Join</button></div></div>
+  <p class="note" id="dmsg" style="margin-top:12px">${ok?'Both players open this same website, then one creates a room and the other joins with the code.':'Live play could not start in this browser. Solo modes still work.'}</p></div>`);
 }
 async function enterRoom(code,host){
-const msg=$('#dmsg');
-try{if(!RM){RM=await window.claude.use('room')}}catch(e){RM=null}
-if(!RM){if(msg)msg.textContent='Live rooms are not available in this view. Open the published link from Claude and sign in.';return}
-try{const room=await RM.join('ga-'+code.toLowerCase(),host);
-if(D&&D.un)D.un();
-D={code,room,host,st:0,zn:'mix'};
-room.presence({nm:S.name||'Player',host:host?1:0,r:-1,d:0,sc:0,st:null,zn:'mix'}).catch(()=>{});
-D.un=room.onPeers(()=>{if(view==='wait')waitRender();else if(g&&g.mode==='duel')duelCheck();joinerWatch()});
-view='wait';waitRender();
-}catch(e){if(msg)msg.textContent='Could not join that room. Check the code and try again.'}
+  const msg=$('#dmsg');
+  try{if(!RM){RM=await window.claude.use('room')}}catch(e){RM=null}
+  if(!RM){if(msg)msg.textContent='Could not reach the live server. Check your internet and reload the page.';return}
+  try{const room=await RM.join('ga-'+code.toLowerCase(),host);
+   if(D&&D.un)D.un();
+   D={code,room,host,st:0,zn:'mix'};
+   room.presence({nm:S.name||'Player',host:host?1:0,r:-1,d:0,sc:0,st:null,zn:'mix'}).catch(()=>{});
+   D.un=room.onPeers(()=>{if(view==='wait')waitRender();else if(g&&g.mode==='duel')duelCheck();joinerWatch()});
+   view='wait';waitRender();
+  }catch(e){if(msg)msg.textContent='Room not found. Ask the host to create a room first and keep the page open, then check the 4-letter code.'}
 }
 function joinerWatch(){if(!D||D.host||view!=='wait')return;const h=D.room.peers().find(p=>!p.isMe&&p.presence&&p.presence.host===1&&p.presence.st);
-if(h&&h.presence.st!==D.st){D.st=h.presence.st;launchDuel(h.presence.st,h.presence.zn||'mix')}}
+  if(h&&h.presence.st!==D.st){D.st=h.presence.st;launchDuel(h.presence.st,h.presence.zn||'mix')}}
 function waitRender(){
-if(!D)return;const o=opp();
-const zsel=D.host?`<div class="namebox" style="justify-content:center"><label for="zsel">Topic</label><select id="zsel" style="background:var(--board2);color:var(--chalk);border:2px solid var(--line);border-radius:10px;padding:9px;font:inherit;font-weight:800;max-width:100%"><option value="mix">All zones mixed</option>${Z.map(z=>`<option value="${z.id}" ${D.zn===z.id?'selected':''}>${esc(z.n)}</option>`).join('')}</select></div>`:'';
-mount(`<div class="card center"><div class="qtype">Room code</div><div class="code">${esc(D.code)}</div><p class="note">Tell your partner this code.</p>
-<div class="vs"><div class="pl me"><small>You</small><b>${esc(S.name||'Player')}</b></div><div class="vsx">VS</div><div class="pl opp"><small>${o?'in the room':'waiting'}</small><b>${o?esc(String(o.presence.nm).slice(0,14)):'...'}</b></div></div>
-${zsel}${D.host?`<button class="btn go" data-act="start" ${o?'':'disabled'}>${o?'Start the duel':'Waiting for partner'}</button>`:`<p>${o?'Waiting for the host to start...':'Joining...'}</p>`}<div style="margin-top:14px"><button class="btn alt" data-act="leave">Leave room</button></div></div>`);
+  if(!D)return;const o=opp();
+  const zsel=D.host?`<div class="namebox" style="justify-content:center"><label for="zsel">Topic</label><select id="zsel" style="background:var(--board2);color:var(--chalk);border:2px solid var(--line);border-radius:10px;padding:9px;font:inherit;font-weight:800;max-width:100%"><option value="mix">All zones mixed</option>${Z.map(z=>`<option value="${z.id}" ${D.zn===z.id?'selected':''}>${esc(z.n)}</option>`).join('')}</select></div>`:'';
+  mount(`<div class="card center"><div class="qtype">Room code</div><div class="code">${esc(D.code)}</div><p class="note">Tell your partner this code.</p>
+  <div class="vs"><div class="pl me"><small>You</small><b>${esc(S.name||'Player')}</b></div><div class="vsx">VS</div><div class="pl opp"><small>${o?'in the room':'waiting'}</small><b>${o?esc(String(o.presence.nm).slice(0,14)):'...'}</b></div></div>
+  ${zsel}${D.host?`<button class="btn go" data-act="start" ${o?'':'disabled'}>${o?'Start the duel':'Waiting for partner'}</button>`:`<p>${o?'Waiting for the host to start...':'Joining...'}</p>`}<div style="margin-top:14px"><button class="btn alt" data-act="leave">Leave room</button></div></div>`);
 }
 function launchDuel(st,zn){D.zn=zn;adv=null;dPresence({r:-1,d:0,sc:0,ok:null});startGame('duel',{seed:D.code+':'+st,zn})}
 function hostStart(){const o=opp();if(!o){toast('Your partner has not joined yet');return}
-const zn=($('#zsel')||{}).value||'mix';D.zn=zn;const st=Date.now();D.st=st;dPresence({st,zn,r:-1,d:0,sc:0});launchDuel(st,zn)}
+  const zn=($('#zsel')||{}).value||'mix';D.zn=zn;const st=Date.now();D.st=st;dPresence({st,zn,r:-1,d:0,sc:0});launchDuel(st,zn)}
 function leaveRoom(){try{if(D&&D.un)D.un();if(D&&D.room)D.room.leave()}catch(e){}D=null;g=null;home()}
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
-const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act;
-if(a==='home'){if(D){/* leaving to map keeps room closed */leaveRoom();return}home()}
-else if(a==='snd'){S.snd=!S.snd;save();el.textContent=S.snd?'Sound on':'Sound off';if(S.snd)sfx.ok()}
-else if(a==='lesson')lesson(el.dataset.z,0);
-else if(a==='lnav')lesson(el.dataset.z,+el.dataset.i);
-else if(a==='quest')startGame('quest',{zid:el.dataset.z});
-else if(a==='daily'||a==='boss'||a==='review')startGame(a);
-else if(a==='again'){const l=lastGame;if(l&&l.mode==='quest')startGame('quest',{zid:l.zid});else if(l)startGame(l.mode);else home()}
-else if(a==='quit'){if(g&&g.mode==='duel'){leaveRoom()}else{g=null;home()}}
-else if(a==='next'){if(adv){clearTimeout(adv);adv=null}nextQ()}
-else if(a==='pick'&&g&&!g.answered){const q=g.qs[g.i],i=+el.dataset.i;document.querySelectorAll('#qa .tile').forEach((t,j)=>{t.disabled=true;if(q.opts[j].ok)t.classList.add('ok')});if(!q.opts[i].ok)el.classList.add('no');answer(q.opts[i].ok)}
-else if(a==='tag'&&g&&!g.answered){const q=g.qs[g.i],i=+el.dataset.i,ok=i===q.a;document.querySelectorAll('#qa .tile').forEach((t,j)=>{t.disabled=true;if(j===q.a)t.classList.add('ok')});if(!ok)el.classList.add('no');answer(ok)}
-else if(a==='tobank'&&g&&!g.answered){const q=g.qs[g.i];q.tray.push(q.words.find(x=>x.id===+el.dataset.id));drawOrder()}
-else if(a==='untray'&&g&&!g.answered){const q=g.qs[g.i];q.tray=q.tray.filter(x=>x.id!==+el.dataset.id);drawOrder()}
-else if(a==='check'&&g&&!g.answered){const q=g.qs[g.i];answer(q.tray.map(x=>x.w).join(' ')===q.full);document.querySelectorAll('#qa .tile').forEach(t=>t.disabled=true);el.disabled=true}
-else if(a==='duel')duelLobby();
-else if(a==='mkroom'){const c=Array.from({length:4},()=>'ABCDEFGHJKMNPQRSTUVWXYZ'[Math.floor(Math.random()*23)]).join('');enterRoom(c,true)}
-else if(a==='joinroom'){const c=($('#jc').value||'').trim().toUpperCase();if(c.length!==4){$('#dmsg').textContent='Type the 4-letter code.';return}enterRoom(c,false)}
-else if(a==='start')hostStart();
-else if(a==='leave')leaveRoom();
-else if(a==='rematch'){view='wait';dPresence({r:-1,d:0,sc:0});waitRender();joinerWatch()}
+  const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act;
+  if(a==='home'){if(D){/* leaving to map keeps room closed */leaveRoom();return}home()}
+  else if(a==='snd'){S.snd=!S.snd;save();el.textContent=S.snd?'Sound on':'Sound off';if(S.snd)sfx.ok()}
+  else if(a==='lesson')lesson(el.dataset.z,0);
+  else if(a==='lnav')lesson(el.dataset.z,+el.dataset.i);
+  else if(a==='quest')startGame('quest',{zid:el.dataset.z});
+  else if(a==='daily'||a==='boss'||a==='review')startGame(a);
+  else if(a==='again'){const l=lastGame;if(l&&l.mode==='quest')startGame('quest',{zid:l.zid});else if(l)startGame(l.mode);else home()}
+  else if(a==='quit'){if(g&&g.mode==='duel'){leaveRoom()}else{g=null;home()}}
+  else if(a==='next'){if(adv){clearTimeout(adv);adv=null}nextQ()}
+  else if(a==='pick'&&g&&!g.answered){const q=g.qs[g.i],i=+el.dataset.i;document.querySelectorAll('#qa .tile').forEach((t,j)=>{t.disabled=true;if(q.opts[j].ok)t.classList.add('ok')});if(!q.opts[i].ok)el.classList.add('no');answer(q.opts[i].ok)}
+  else if(a==='tag'&&g&&!g.answered){const q=g.qs[g.i],i=+el.dataset.i,ok=i===q.a;document.querySelectorAll('#qa .tile').forEach((t,j)=>{t.disabled=true;if(j===q.a)t.classList.add('ok')});if(!ok)el.classList.add('no');answer(ok)}
+  else if(a==='tobank'&&g&&!g.answered){const q=g.qs[g.i];q.tray.push(q.words.find(x=>x.id===+el.dataset.id));drawOrder()}
+  else if(a==='untray'&&g&&!g.answered){const q=g.qs[g.i];q.tray=q.tray.filter(x=>x.id!==+el.dataset.id);drawOrder()}
+  else if(a==='check'&&g&&!g.answered){const q=g.qs[g.i];answer(q.tray.map(x=>x.w).join(' ')===q.full);document.querySelectorAll('#qa .tile').forEach(t=>t.disabled=true);el.disabled=true}
+  else if(a==='duel')duelLobby();
+  else if(a==='mkroom'){const c=Array.from({length:4},()=>'ABCDEFGHJKMNPQRSTUVWXYZ'[Math.floor(Math.random()*23)]).join('');enterRoom(c,true)}
+  else if(a==='joinroom'){const c=($('#jc').value||'').trim().toUpperCase();if(c.length!==4){$('#dmsg').textContent='Type the 4-letter code.';return}enterRoom(c,false)}
+  else if(a==='start')hostStart();
+  else if(a==='leave')leaveRoom();
+  else if(a==='rematch'){view='wait';dPresence({r:-1,d:0,sc:0});waitRender();joinerWatch()}
 });
 document.addEventListener('input',e=>{if(e.target.id==='nm'){S.name=e.target.value.slice(0,14);save();dPresence({nm:S.name||'Player'})}});
 document.addEventListener('keydown',e=>{if(!g||g.answered)return;const q=g.qs[g.i];if(q&&q.t==='m'&&'1234'.includes(e.key)&&q.opts[+e.key-1]){const b=document.querySelectorAll('#qa .tile')[+e.key-1];if(b)b.click()}});
